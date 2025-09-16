@@ -90,7 +90,7 @@ export class CyberSageCdkStack extends Stack {
 
     const lambdaIntegration = new HttpLambdaIntegration(
       "DiscordBotIntegration",
-      discordBotHandler
+      discordBotHandler,
     );
 
     api.addRoutes({
