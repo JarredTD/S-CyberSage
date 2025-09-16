@@ -4,11 +4,10 @@ import {
   Duration,
   CfnOutput,
   RemovalPolicy,
-  SecretValue,
 } from "aws-cdk-lib";
 import { PythonFunction } from "@aws-cdk/aws-lambda-python-alpha";
 import { Construct } from "constructs";
-import { RetentionDays } from "aws-cdk-lib/aws-logs";
+import { RetentionDays, LogGroup } from "aws-cdk-lib/aws-logs";
 import { Runtime, Architecture } from "aws-cdk-lib/aws-lambda";
 import {
   HttpApi,
@@ -35,8 +34,8 @@ export class CyberSageCdkStack extends Stack {
       description: "Discord Bot Token",
       generateSecretString: {
         generateStringKey: "token",
-        secretStringTemplate: JSON.stringify({ 
-          DISCORD_BOT_TOKEN: "REPLACE_ME_WITH_YOUR_ACTUAL_TOKEN" 
+        secretStringTemplate: JSON.stringify({
+          DISCORD_BOT_TOKEN: "REPLACE_ME_WITH_YOUR_ACTUAL_TOKEN",
         }),
       },
     });
@@ -45,10 +44,15 @@ export class CyberSageCdkStack extends Stack {
       description: "Discord Public Key",
       generateSecretString: {
         generateStringKey: "key",
-        secretStringTemplate: JSON.stringify({ 
-          DISCORD_PUBLIC_KEY: "REPLACE_ME_WITH_YOUR_ACTUAL_PUBLIC_KEY" 
+        secretStringTemplate: JSON.stringify({
+          DISCORD_PUBLIC_KEY: "REPLACE_ME_WITH_YOUR_ACTUAL_PUBLIC_KEY",
         }),
       },
+    });
+
+    const botLogGroup = new LogGroup(this, "DiscordBotLogGroup", {
+      retention: RetentionDays.ONE_WEEK,
+      logGroupName: "/aws/lambda/discord-bot-handler",
     });
 
     const discordBotHandler = new PythonFunction(this, "DiscordBotHandler", {
@@ -64,7 +68,7 @@ export class CyberSageCdkStack extends Stack {
         DISCORD_TOKEN_SECRET_ARN: discordTokenSecret.secretArn,
         DISCORD_PUBLIC_KEY_SECRET_ARN: discordPublicKeySecret.secretArn,
       },
-      logRetention: RetentionDays.ONE_WEEK,
+      logGroup: botLogGroup,
     });
 
     roleMappingsTable.grantReadData(discordBotHandler);
@@ -83,7 +87,6 @@ export class CyberSageCdkStack extends Stack {
         allowMethods: [CorsHttpMethod.POST],
         allowOrigins: ["*"],
       },
-      createDefaultStage: false,
     });
 
     new CfnStage(this, "ProdStage", {
@@ -98,7 +101,7 @@ export class CyberSageCdkStack extends Stack {
 
     const lambdaIntegration = new HttpLambdaIntegration(
       "DiscordBotIntegration",
-      discordBotHandler,
+      discordBotHandler
     );
 
     api.addRoutes({
