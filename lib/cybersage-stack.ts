@@ -33,20 +33,16 @@ export class CyberSageCdkStack extends Stack {
     const discordTokenSecret = new Secret(this, "DiscordTokenSecret", {
       description: "Discord Bot Token",
       generateSecretString: {
+        secretStringTemplate: JSON.stringify({}),
         generateStringKey: "token",
-        secretStringTemplate: JSON.stringify({
-          DISCORD_BOT_TOKEN: "REPLACE_ME_WITH_YOUR_ACTUAL_TOKEN",
-        }),
       },
     });
 
     const discordPublicKeySecret = new Secret(this, "DiscordPublicKeySecret", {
       description: "Discord Public Key",
       generateSecretString: {
+        secretStringTemplate: JSON.stringify({}),
         generateStringKey: "key",
-        secretStringTemplate: JSON.stringify({
-          DISCORD_PUBLIC_KEY: "REPLACE_ME_WITH_YOUR_ACTUAL_PUBLIC_KEY",
-        }),
       },
     });
 
