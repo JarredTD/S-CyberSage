@@ -14,6 +14,8 @@ logger.setLevel(logging.INFO)
 DISCORD_API_BASE = "https://discord.com/api/v10"
 INTERACTION_TYPE_PING = 1
 INTERACTION_TYPE_APPLICATION_COMMAND = 2
+INTERACTION_TYPE_AUTOCOMPLETE_REQUEST = 4
+INTERACTION_TYPE_AUTOCOMPLETE_RESPONSE = 8
 INTERACTION_RESPONSE_EPHEMERAL = 64
 
 ROLE_TABLE = os.environ["ROLE_MAPPINGS_TABLE_NAME"]
@@ -70,12 +72,26 @@ def lookup_role_id(role_name: str) -> Optional[str]:
         return None
 
 
+def get_matching_roles(prefix: str) -> List[dict]:
+    """Return up to 25 roles from DynamoDB matching the typed prefix"""
+    try:
+        items = table.scan()["Items"]
+        matching_roles = [
+            {"name": r["roleName"], "value": r["roleName"]}
+            for r in items
+            if r["roleName"].lower().startswith(prefix.lower())
+        ][:25]
+        return matching_roles
+    except Exception as e:
+        logger.error(f"Failed to fetch roles for autocomplete: {str(e)}")
+        return []
+
+
 def user_has_role(user_roles: List[str], role_id: str) -> bool:
     return role_id in user_roles
 
 
 def modify_user_role(guild_id: str, user_id: str, role_id: str, action: str) -> bool:
-    """Add or remove a role. action='add' or 'remove'"""
     discord_token = get_discord_token()
     method = requests.put if action == "add" else requests.delete
     url = f"{DISCORD_API_BASE}/guilds/{guild_id}/members/{user_id}/roles/{role_id}"
@@ -104,7 +120,6 @@ def modify_user_role(guild_id: str, user_id: str, role_id: str, action: str) -> 
 
 
 def get_member_roles(guild_id: str, user_id: str) -> Optional[List[str]]:
-    """Retrieve user's current roles in a guild"""
     try:
         discord_token = get_discord_token()
         resp = requests.get(
@@ -128,7 +143,7 @@ def handler(event, context):
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": "Invalid request signature"}),
         }
-    
+
     body = json.loads(event["body"])
     interaction_type = body.get("type")
 
@@ -137,6 +152,23 @@ def handler(event, context):
             "statusCode": 200,
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"type": INTERACTION_TYPE_PING}),
+        }
+
+    if interaction_type == INTERACTION_TYPE_AUTOCOMPLETE_REQUEST:
+        options = body.get("data", {}).get("options", [])
+        if options:
+            focused_option = options[0]
+            typed_value = focused_option.get("value", "")
+            choices = get_matching_roles(typed_value)
+        else:
+            choices = []
+
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(
+                {"type": INTERACTION_TYPE_AUTOCOMPLETE_RESPONSE, "data": {"choices": choices}}
+            ),
         }
 
     if interaction_type == INTERACTION_TYPE_APPLICATION_COMMAND:
@@ -149,26 +181,30 @@ def handler(event, context):
             return {
                 "statusCode": 200,
                 "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({
-                    "type": 4,
-                    "data": {
-                        "content": "Unknown command",
-                        "flags": INTERACTION_RESPONSE_EPHEMERAL,
-                    },
-                }),
+                "body": json.dumps(
+                    {
+                        "type": 4,
+                        "data": {
+                            "content": "Unknown command",
+                            "flags": INTERACTION_RESPONSE_EPHEMERAL,
+                        },
+                    }
+                ),
             }
 
         if not options or "value" not in options[0]:
             return {
                 "statusCode": 200,
                 "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({
-                    "type": 4,
-                    "data": {
-                        "content": "Role name is missing",
-                        "flags": INTERACTION_RESPONSE_EPHEMERAL,
-                    },
-                }),
+                "body": json.dumps(
+                    {
+                        "type": 4,
+                        "data": {
+                            "content": "Role name is missing",
+                            "flags": INTERACTION_RESPONSE_EPHEMERAL,
+                        },
+                    }
+                ),
             }
 
         role_name = options[0]["value"]
@@ -178,13 +214,15 @@ def handler(event, context):
             return {
                 "statusCode": 200,
                 "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({
-                    "type": 4,
-                    "data": {
-                        "content": f"Role '{role_name}' not found",
-                        "flags": INTERACTION_RESPONSE_EPHEMERAL,
-                    },
-                }),
+                "body": json.dumps(
+                    {
+                        "type": 4,
+                        "data": {
+                            "content": f"Role '{role_name}' not found",
+                            "flags": INTERACTION_RESPONSE_EPHEMERAL,
+                        },
+                    }
+                ),
             }
 
         member_roles = get_member_roles(guild_id, user_id)
@@ -192,38 +230,44 @@ def handler(event, context):
             return {
                 "statusCode": 200,
                 "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({
-                    "type": 4,
-                    "data": {
-                        "content": "Failed to fetch your roles",
-                        "flags": INTERACTION_RESPONSE_EPHEMERAL,
-                    },
-                }),
+                "body": json.dumps(
+                    {
+                        "type": 4,
+                        "data": {
+                            "content": "Failed to fetch your roles",
+                            "flags": INTERACTION_RESPONSE_EPHEMERAL,
+                        },
+                    }
+                ),
             }
 
         if user_has_role(member_roles, role_id):
             success = modify_user_role(guild_id, user_id, role_id, "remove")
             message = (
                 f"The '{role_name}' role was removed from you."
-                if success else "Failed to remove role."
+                if success
+                else "Failed to remove role."
             )
         else:
             success = modify_user_role(guild_id, user_id, role_id, "add")
             message = (
                 f"You were given the '{role_name}' role."
-                if success else "Failed to add role."
+                if success
+                else "Failed to add role."
             )
 
         return {
             "statusCode": 200,
             "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({
-                "type": 4,
-                "data": {
-                    "content": message,
-                    "flags": INTERACTION_RESPONSE_EPHEMERAL,
-                },
-            }),
+            "body": json.dumps(
+                {
+                    "type": 4,
+                    "data": {
+                        "content": message,
+                        "flags": INTERACTION_RESPONSE_EPHEMERAL,
+                    },
+                }
+            ),
         }
 
     logger.warning(f"Unknown interaction type: {interaction_type}")
@@ -232,4 +276,3 @@ def handler(event, context):
         "headers": {"Content-Type": "application/json"},
         "body": json.dumps({"error": "Unknown interaction type"}),
     }
-

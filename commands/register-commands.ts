@@ -15,6 +15,7 @@ const commands = [
         name: "role_name",
         description: "The role you want",
         type: 3,
+        autocomplete: true,
         required: true,
       },
     ],
