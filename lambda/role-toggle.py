@@ -13,7 +13,7 @@ logger.setLevel(logging.INFO)
 
 DISCORD_API_BASE = "https://discord.com/api/v10"
 INTERACTION_TYPE_PING = 1
-INTERACTION_TYPE_APPLICATION_COMMAND = 4
+INTERACTION_TYPE_APPLICATION_COMMAND = 2
 INTERACTION_RESPONSE_EPHEMERAL = 64
 
 ROLE_TABLE = os.environ["ROLE_MAPPINGS_TABLE_NAME"]
@@ -123,13 +123,21 @@ def handler(event, context):
     logger.info("Received Discord interaction request")
 
     if not verify_discord_request(event):
-        return {"statusCode": 401, "body": "Invalid request signature"}
-
+        return {
+            "statusCode": 401,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "Invalid request signature"}),
+        }
+    
     body = json.loads(event["body"])
     interaction_type = body.get("type")
 
     if interaction_type == INTERACTION_TYPE_PING:
-        return {"statusCode": 200, "body": json.dumps({"type": INTERACTION_TYPE_PING})}
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"type": INTERACTION_TYPE_PING}),
+        }
 
     if interaction_type == INTERACTION_TYPE_APPLICATION_COMMAND:
         command_name = body.get("data", {}).get("name")
@@ -140,29 +148,27 @@ def handler(event, context):
         if command_name != "role":
             return {
                 "statusCode": 200,
-                "body": json.dumps(
-                    {
-                        "type": 4,
-                        "data": {
-                            "content": "Unknown command",
-                            "flags": INTERACTION_RESPONSE_EPHEMERAL,
-                        },
-                    }
-                ),
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({
+                    "type": 4,
+                    "data": {
+                        "content": "Unknown command",
+                        "flags": INTERACTION_RESPONSE_EPHEMERAL,
+                    },
+                }),
             }
 
         if not options or "value" not in options[0]:
             return {
                 "statusCode": 200,
-                "body": json.dumps(
-                    {
-                        "type": 4,
-                        "data": {
-                            "content": "Role name is missing",
-                            "flags": INTERACTION_RESPONSE_EPHEMERAL,
-                        },
-                    }
-                ),
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({
+                    "type": 4,
+                    "data": {
+                        "content": "Role name is missing",
+                        "flags": INTERACTION_RESPONSE_EPHEMERAL,
+                    },
+                }),
             }
 
         role_name = options[0]["value"]
@@ -171,62 +177,59 @@ def handler(event, context):
         if not role_id:
             return {
                 "statusCode": 200,
-                "body": json.dumps(
-                    {
-                        "type": 4,
-                        "data": {
-                            "content": f"Role '{role_name}' not found",
-                            "flags": INTERACTION_RESPONSE_EPHEMERAL,
-                        },
-                    }
-                ),
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({
+                    "type": 4,
+                    "data": {
+                        "content": f"Role '{role_name}' not found",
+                        "flags": INTERACTION_RESPONSE_EPHEMERAL,
+                    },
+                }),
             }
 
         member_roles = get_member_roles(guild_id, user_id)
         if member_roles is None:
             return {
                 "statusCode": 200,
-                "body": json.dumps(
-                    {
-                        "type": 4,
-                        "data": {
-                            "content": "Failed to fetch your roles",
-                            "flags": INTERACTION_RESPONSE_EPHEMERAL,
-                        },
-                    }
-                ),
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({
+                    "type": 4,
+                    "data": {
+                        "content": "Failed to fetch your roles",
+                        "flags": INTERACTION_RESPONSE_EPHEMERAL,
+                    },
+                }),
             }
 
         if user_has_role(member_roles, role_id):
             success = modify_user_role(guild_id, user_id, role_id, "remove")
             message = (
                 f"The '{role_name}' role was removed from you."
-                if success
-                else "Failed to remove role."
+                if success else "Failed to remove role."
             )
         else:
             success = modify_user_role(guild_id, user_id, role_id, "add")
             message = (
                 f"You were given the '{role_name}' role."
-                if success
-                else "Failed to add role."
+                if success else "Failed to add role."
             )
 
         return {
             "statusCode": 200,
-            "body": json.dumps(
-                {
-                    "type": 4,
-                    "data": {
-                        "content": message,
-                        "flags": INTERACTION_RESPONSE_EPHEMERAL,
-                    },
-                }
-            ),
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({
+                "type": 4,
+                "data": {
+                    "content": message,
+                    "flags": INTERACTION_RESPONSE_EPHEMERAL,
+                },
+            }),
         }
 
     logger.warning(f"Unknown interaction type: {interaction_type}")
     return {
         "statusCode": 400,
+        "headers": {"Content-Type": "application/json"},
         "body": json.dumps({"error": "Unknown interaction type"}),
     }
+

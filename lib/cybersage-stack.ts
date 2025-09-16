@@ -83,6 +83,7 @@ export class CyberSageCdkStack extends Stack {
         allowMethods: [CorsHttpMethod.POST],
         allowOrigins: ["*"],
       },
+      createDefaultStage: false,
     });
 
     new CfnStage(this, "ProdStage", {
@@ -107,7 +108,7 @@ export class CyberSageCdkStack extends Stack {
     });
 
     new CfnOutput(this, "ApiEndpoint", {
-      value: api.url!,
+      value: `https://${api.apiId}.execute-api.${this.region}.amazonaws.com/prod/`,
       description: "API Gateway endpoint URL for Discord interactions",
     });
   }

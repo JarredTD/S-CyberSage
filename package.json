@@ -11,9 +11,12 @@
   },
   "dependencies": {
     "@aws-cdk/aws-lambda-python-alpha": "^2.215.0-alpha.0",
+    "@discordjs/rest": "^2.6.0",
     "aws-cdk-lib": "^2.213.0",
     "constructs": "^10.4.2",
-    "dotenv": "^17.2.1",
+    "discord-api-types": "^0.38.25",
+    "discord.js": "^14.22.1",
+    "dotenv": "^17.2.2",
     "source-map-support": "^0.5.21"
   },
   "devDependencies": {
