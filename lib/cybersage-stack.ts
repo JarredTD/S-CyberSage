@@ -5,10 +5,9 @@ import {
   CfnOutput,
   RemovalPolicy,
 } from "aws-cdk-lib";
-import { PythonFunction } from "@aws-cdk/aws-lambda-python-alpha";
 import { Construct } from "constructs";
 import { RetentionDays, LogGroup } from "aws-cdk-lib/aws-logs";
-import { Runtime, Architecture } from "aws-cdk-lib/aws-lambda";
+import { Function, Runtime, Code, Architecture } from "aws-cdk-lib/aws-lambda";
 import {
   HttpApi,
   HttpMethod,
@@ -49,14 +48,15 @@ export class CyberSageCdkStack extends Stack {
     const botLogGroup = new LogGroup(this, "DiscordBotLogGroup", {
       retention: RetentionDays.ONE_WEEK,
       logGroupName: "/aws/lambda/discord-bot-handler",
+      removalPolicy: RemovalPolicy.DESTROY,
     });
 
-    const discordBotHandler = new PythonFunction(this, "DiscordBotHandler", {
-      entry: join(__dirname, "../lambda"),
-      index: "role-toggle.py",
-      handler: "handler",
-      runtime: Runtime.PYTHON_3_12,
+    const bootstrapDir = join(__dirname, "../lambda/bootstrap");
+    const discordBotHandler = new Function(this, "DiscordBotHandler", {
+      runtime: Runtime.PROVIDED_AL2,
       architecture: Architecture.ARM_64,
+      handler: "bootstrap",
+      code: Code.fromAsset(bootstrapDir),
       memorySize: 256,
       timeout: Duration.seconds(10),
       environment: {

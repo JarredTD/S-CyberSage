@@ -7,7 +7,9 @@
     "build": "tsc",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "cdk": "cdk"
+    "build-lambda": "./lambda/build.sh",
+    "cdk-deploy": "bash -c 'cdk deploy --all \"$@\"' --",
+    "build-and-deploy": "bash -c './lambda/build.sh && cdk deploy --all \"$@\"' --"
   },
   "dependencies": {
     "@aws-cdk/aws-lambda-python-alpha": "^2.215.0-alpha.0",
