@@ -1,0 +1,4 @@
+[build]
+target = ["aarch64-unknown-linux-musl"]
+lambda_dir = "lambda"
+output_format = "zip"

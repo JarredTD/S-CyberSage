@@ -4,12 +4,11 @@
   "description": "CDK app for deploying serverless cyber sage",
   "private": true,
   "scripts": {
-    "build": "tsc",
+    "build": "cargo lambda build --release --manifest-path s-cybersage-rs/Cargo.toml",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "build-lambda": "./lambda/build.sh",
-    "cdk-deploy": "bash -c 'cdk deploy --all \"$@\"' --",
-    "build-and-deploy": "bash -c './lambda/build.sh && cdk deploy --all \"$@\"' --"
+    "predeploy": "npm run build",
+    "deploy": "bash -c 'cdk deploy --all \"$@\"' --"
   },
   "dependencies": {
     "@aws-cdk/aws-lambda-python-alpha": "^2.215.0-alpha.0",

@@ -239,4 +239,4 @@ cdk.out/
 cdk.context.json
 .vscode/
 target-cross/
-bootstrap/
+lambda/

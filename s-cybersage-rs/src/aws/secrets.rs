@@ -2,15 +2,14 @@ use anyhow::{Context, Result};
 use aws_sdk_secretsmanager::Client;
 use serde_json::Value;
 
+#[derive(Clone)]
 pub struct SecretsManager {
     client: Client,
 }
 
 impl SecretsManager {
-    pub async fn new() -> Result<Self> {
-        let config = aws_config::load_from_env().await;
-        let client = Client::new(&config);
-        Ok(Self { client })
+    pub fn new_with_client(client: Client) -> Self {
+        Self { client }
     }
 
     pub async fn get_secret(&self, secret_id: &str, key: &str) -> Result<String> {

@@ -1,5 +1,6 @@
 use anyhow::Context;
-use aws_sdk_dynamodb;
+use aws_sdk_dynamodb::Client as DynamoClient;
+use aws_sdk_secretsmanager::Client as SecretsClient;
 use lambda_http::{Body, Error, Request, Response};
 use reqwest;
 use serde_json::json;
@@ -17,10 +18,20 @@ use crate::{
     discord::roles::{fetch_member_roles, modify_user_role},
 };
 
-// Constants
 const EPHEMERAL_FLAG: u64 = 1 << 6;
 
-pub(crate) async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
+pub(crate) async fn function_handler(
+    event: Request,
+    dynamo_client: DynamoClient,
+    secrets_client: SecretsClient,
+) -> Result<Response<Body>, Error> {
+    tracing::info!("Lambda invoked");
+    tracing::debug!("Headers: {:?}", event.headers());
+
+    let body_bytes = event.body().as_ref();
+    let body_str = std::str::from_utf8(body_bytes).unwrap_or("");
+    tracing::debug!("Full request body: {}", body_str);
+
     let headers = event.headers();
     let signature = headers
         .get("x-signature-ed25519")
@@ -31,13 +42,10 @@ pub(crate) async fn function_handler(event: Request) -> Result<Response<Body>, E
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default();
 
-    let body_bytes = event.body().as_ref();
-    let body_str = std::str::from_utf8(body_bytes).unwrap_or("");
+    tracing::info!("Initializing SecretsManager wrapper");
+    let secrets = SecretsManager::new_with_client(secrets_client.clone());
 
-    let secrets = SecretsManager::new()
-        .await
-        .context("Failed to init secrets manager")?;
-
+    tracing::info!("Fetching Discord public key from SecretsManager");
     let discord_public_key = secrets
         .get_secret(
             &std::env::var("DISCORD_PUBLIC_KEY_SECRET_ARN").unwrap(),
@@ -53,6 +61,7 @@ pub(crate) async fn function_handler(event: Request) -> Result<Response<Body>, E
             &json!({ "error": "Invalid request signature" }),
         ));
     }
+    tracing::info!("Signature verified successfully");
 
     let interaction: InteractionRequest = match serde_json::from_str(body_str) {
         Ok(i) => i,
@@ -62,29 +71,27 @@ pub(crate) async fn function_handler(event: Request) -> Result<Response<Body>, E
         }
     };
 
-    let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
-    let config = aws_sdk_dynamodb::Config::builder()
-        .region(aws_types::region::Region::new(region))
-        .build();
-    let dynamo_client = aws_sdk_dynamodb::Client::from_conf(config);
-
-    let role_db = RoleDb::new(
-        dynamo_client,
-        std::env::var("ROLE_MAPPINGS_TABLE_NAME").unwrap(),
+    tracing::info!(
+        "Received interaction of type: {:?}",
+        interaction.interaction_type
     );
+
+    let role_table = std::env::var("ROLE_MAPPINGS_TABLE_NAME").unwrap();
+    let role_db = RoleDb::new(dynamo_client.clone(), role_table.clone());
+    tracing::info!("Initialized RoleDb for table: {}", role_table);
 
     let discord_token = secrets
         .get_secret(&std::env::var("DISCORD_TOKEN_SECRET_ARN").unwrap(), "token")
         .await
         .context("Failed to get Discord token")?;
 
-    match interaction.interaction_type {
+    let response = match interaction.interaction_type {
         InteractionType::Ping => {
-            let resp = InteractionResponse {
+            tracing::info!("Responding to Ping");
+            InteractionResponse {
                 kind: InteractionCallbackType::Pong,
                 data: None,
-            };
-            Ok(json_response(200, &resp))
+            }
         }
 
         InteractionType::ApplicationCommandAutocomplete => {
@@ -105,6 +112,11 @@ pub(crate) async fn function_handler(event: Request) -> Result<Response<Body>, E
                 .scan_roles_by_prefix(prefix)
                 .await
                 .unwrap_or_default();
+            tracing::info!(
+                "Autocomplete scan found {} roles for prefix '{}'",
+                roles.len(),
+                prefix
+            );
 
             let choices: Vec<ApplicationCommandOptionChoice> = roles
                 .into_iter()
@@ -114,16 +126,14 @@ pub(crate) async fn function_handler(event: Request) -> Result<Response<Body>, E
                 })
                 .collect();
 
-            let resp = InteractionResponse {
+            InteractionResponse {
                 kind: InteractionCallbackType::ApplicationCommandAutocompleteResult,
                 data: Some(InteractionCallbackData {
                     content: None,
                     flags: None,
                     choices: Some(choices),
                 }),
-            };
-
-            Ok(json_response(200, &resp))
+            }
         }
 
         InteractionType::ApplicationCommand => {
@@ -133,6 +143,7 @@ pub(crate) async fn function_handler(event: Request) -> Result<Response<Body>, E
             };
 
             if cmd_data.name != "role" {
+                tracing::warn!("Unknown command: {}", cmd_data.name);
                 return Ok(ephemeral_response("Unknown command"));
             }
 
@@ -145,14 +156,21 @@ pub(crate) async fn function_handler(event: Request) -> Result<Response<Body>, E
             };
 
             let role_id = match role_db.get_role_id(role_name).await {
-                Ok(Some(rid)) => rid,
+                Ok(Some(rid)) => {
+                    tracing::info!("Found role ID {} for role '{}'", rid, role_name);
+                    rid
+                }
                 Ok(None) => {
+                    tracing::warn!("Role '{}' not found in DynamoDB", role_name);
                     return Ok(ephemeral_response(&format!(
                         "Role '{}' not found",
                         role_name
-                    )))
+                    )));
                 }
-                Err(_) => return Ok(ephemeral_response("Failed to lookup role")),
+                Err(e) => {
+                    tracing::error!("Failed to lookup role '{}': {:?}", role_name, e);
+                    return Ok(ephemeral_response("Failed to lookup role"));
+                }
             };
 
             let guild_id = match &interaction.guild_id {
@@ -166,14 +184,28 @@ pub(crate) async fn function_handler(event: Request) -> Result<Response<Body>, E
             };
 
             let client = reqwest::Client::new();
-            let member_roles =
-                match fetch_member_roles(&client, &discord_token, guild_id, user_id).await {
-                    Ok(roles) => roles,
-                    Err(_) => return Ok(ephemeral_response("Failed to fetch your roles")),
-                };
+            tracing::info!("Fetching member roles for user {}", user_id);
+            let member_roles = match fetch_member_roles(&client, &discord_token, guild_id, user_id)
+                .await
+            {
+                Ok(roles) => {
+                    tracing::info!("Fetched {} roles for user {}", roles.len(), user_id);
+                    roles
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to fetch member roles for user {}: {:?}", user_id, e);
+                    return Ok(ephemeral_response("Failed to fetch your roles"));
+                }
+            };
 
             let has_role = member_roles.iter().any(|r| r == &role_id);
 
+            tracing::info!(
+                "Modifying role '{}' for user {} (currently has role: {})",
+                role_name,
+                user_id,
+                has_role
+            );
             let success = if has_role {
                 modify_user_role(
                     &client,
@@ -187,6 +219,7 @@ pub(crate) async fn function_handler(event: Request) -> Result<Response<Body>, E
             } else {
                 modify_user_role(&client, &discord_token, guild_id, user_id, &role_id, "add").await
             };
+            tracing::info!("Role modification success: {}", success);
 
             let message = if success {
                 if has_role {
@@ -200,13 +233,23 @@ pub(crate) async fn function_handler(event: Request) -> Result<Response<Body>, E
                 "Failed to add role.".to_string()
             };
 
-            Ok(ephemeral_response(&message))
+            InteractionResponse {
+                kind: InteractionCallbackType::ChannelMessageWithSource,
+                data: Some(InteractionCallbackData {
+                    content: Some(message),
+                    flags: Some(EPHEMERAL_FLAG),
+                    choices: None,
+                }),
+            }
         }
-    }
+    };
+
+    Ok(json_response(200, &response))
 }
 
 fn json_response<T: serde::Serialize>(status: u16, body: &T) -> Response<Body> {
     let body_str = serde_json::to_string(body).unwrap_or_else(|_| "{}".to_string());
+    tracing::debug!("Response JSON (status {}): {}", status, body_str);
     Response::builder()
         .status(status)
         .header("content-type", "application/json")

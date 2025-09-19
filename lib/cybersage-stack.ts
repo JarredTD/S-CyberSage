@@ -51,18 +51,19 @@ export class CyberSageCdkStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
-    const bootstrapDir = join(__dirname, "../lambda/bootstrap");
+    const lambdaZip = join(__dirname, "../lambda/s-cybersage-rs/bootstrap.zip");
     const discordBotHandler = new Function(this, "DiscordBotHandler", {
       runtime: Runtime.PROVIDED_AL2,
       architecture: Architecture.ARM_64,
       handler: "bootstrap",
-      code: Code.fromAsset(bootstrapDir),
+      code: Code.fromAsset(lambdaZip),
       memorySize: 256,
       timeout: Duration.seconds(10),
       environment: {
         ROLE_MAPPINGS_TABLE_NAME: roleMappingsTable.tableName,
         DISCORD_TOKEN_SECRET_ARN: discordTokenSecret.secretArn,
         DISCORD_PUBLIC_KEY_SECRET_ARN: discordPublicKeySecret.secretArn,
+        RUST_LOG: "info"
       },
       logGroup: botLogGroup,
     });

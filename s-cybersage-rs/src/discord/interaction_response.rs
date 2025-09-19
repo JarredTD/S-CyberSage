@@ -1,11 +1,19 @@
-use serde::Serialize;
+use serde::{ser::Serializer, Serialize};
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Debug, Copy, Clone)]
 pub enum InteractionCallbackType {
     Pong = 1,
     ChannelMessageWithSource = 4,
     ApplicationCommandAutocompleteResult = 8,
+}
+
+impl Serialize for InteractionCallbackType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u8(*self as u8)
+    }
 }
 
 #[derive(Debug, Serialize)]
