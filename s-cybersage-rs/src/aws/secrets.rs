@@ -26,8 +26,7 @@ impl SecretsManager {
             .secret_string()
             .context("Secret value is missing or not a string")?;
 
-        serde_json::from_str(secret_str)
-            .context("Failed to parse secret string as JSON")
+        serde_json::from_str(secret_str).context("Failed to parse secret string as JSON")
     }
 
     pub async fn get_secret_cached(

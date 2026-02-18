@@ -24,10 +24,28 @@ export class CyberSageCdkStack extends Stack {
     super(scope, id, props);
 
     const roleMappingsTable = new Table(this, "RoleMappingsTable", {
-      partitionKey: { name: "PK", type: AttributeType.STRING },
-      sortKey: { name: "SK", type: AttributeType.STRING },
+      partitionKey: {
+        name: "guild_id",
+        type: AttributeType.STRING,
+      },
+      sortKey: {
+        name: "entity_key",
+        type: AttributeType.STRING,
+      },
       billingMode: BillingMode.PAY_PER_REQUEST,
-      removalPolicy: RemovalPolicy.RETAIN,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    roleMappingsTable.addGlobalSecondaryIndex({
+      indexName: "role-name-index",
+      partitionKey: {
+        name: "guild_id",
+        type: AttributeType.STRING,
+      },
+      sortKey: {
+        name: "role_name_key",
+        type: AttributeType.STRING,
+      },
     });
 
     const discordTokenSecret = new Secret(this, "DiscordTokenSecret", {
@@ -69,7 +87,7 @@ export class CyberSageCdkStack extends Stack {
       logGroup: botLogGroup,
     });
 
-    roleMappingsTable.grantReadData(discordBotHandler);
+    roleMappingsTable.grantReadWriteData(discordBotHandler);
     discordTokenSecret.grantRead(discordBotHandler);
     discordPublicKeySecret.grantRead(discordBotHandler);
 

@@ -1,6 +1,6 @@
-use anyhow::Result;
-use reqwest::Client;
-use serde_json::Value;
+use anyhow::{Context, Result};
+use reqwest::{Client, StatusCode};
+use serde::Deserialize;
 use tracing;
 
 #[derive(Debug, Clone, Copy)]
@@ -9,12 +9,17 @@ pub enum RoleAction {
     Remove,
 }
 
+#[derive(Debug, Deserialize)]
+struct GuildMember {
+    roles: Vec<String>,
+}
+
 pub async fn fetch_member_roles(
     client: &Client,
     token: &str,
     guild_id: &str,
     user_id: &str,
-) -> Result<Vec<String>, reqwest::Error> {
+) -> Result<Vec<String>> {
     let url = format!(
         "https://discord.com/api/v10/guilds/{}/members/{}",
         guild_id, user_id
@@ -24,20 +29,17 @@ pub async fn fetch_member_roles(
         .get(&url)
         .header("Authorization", format!("Bot {}", token))
         .send()
-        .await?
-        .error_for_status()?;
+        .await
+        .context("Failed to send fetch_member_roles request")?
+        .error_for_status()
+        .context("Discord returned error while fetching member")?;
 
-    let json: Value = resp.json().await?;
+    let member: GuildMember = resp
+        .json()
+        .await
+        .context("Failed to deserialize GuildMember")?;
 
-    Ok(json
-        .get("roles")
-        .and_then(|roles| roles.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect()
-        })
-        .unwrap_or_default())
+    Ok(member.roles)
 }
 
 pub async fn modify_user_role(
@@ -47,7 +49,7 @@ pub async fn modify_user_role(
     user_id: &str,
     role_id: &str,
     action: RoleAction,
-) -> bool {
+) -> Result<()> {
     let url = format!(
         "https://discord.com/api/v10/guilds/{}/members/{}/roles/{}",
         guild_id, user_id, role_id
@@ -61,32 +63,51 @@ pub async fn modify_user_role(
     let resp = request_builder
         .header("Authorization", format!("Bot {}", token))
         .send()
-        .await;
+        .await
+        .context("Failed to send modify_user_role request")?;
 
-    match resp {
-        Ok(r) if r.status().is_success() => true,
-        Ok(r) if r.status().as_u16() == 403 => {
-            tracing::error!(
-                "Bot permission error while {:?} role {} for user {}",
+    match resp.status() {
+        s if s.is_success() => {
+            tracing::info!(
+                "Successfully {:?} role {} for user {}",
                 action,
                 role_id,
                 user_id
             );
-            false
+            Ok(())
         }
-        Ok(r) => {
+
+        StatusCode::FORBIDDEN => {
             tracing::error!(
-                "Failed to {:?} role {} for user {}: status {}",
+                "Permission error while {:?} role {} for user {}",
+                action,
+                role_id,
+                user_id
+            );
+            anyhow::bail!("Bot lacks permission to modify role")
+        }
+
+        StatusCode::TOO_MANY_REQUESTS => {
+            tracing::warn!(
+                "Rate limited while {:?} role {} for user {}",
+                action,
+                role_id,
+                user_id
+            );
+            anyhow::bail!("Rate limited by Discord API")
+        }
+
+        other => {
+            let body = resp.text().await.unwrap_or_default();
+            tracing::error!(
+                "Failed to {:?} role {} for user {}: status {}, body: {}",
                 action,
                 role_id,
                 user_id,
-                r.status()
+                other,
+                body
             );
-            false
-        }
-        Err(e) => {
-            tracing::error!("Discord API request failed: {:?}", e);
-            false
+            anyhow::bail!("Discord API error: {}", other);
         }
     }
 }

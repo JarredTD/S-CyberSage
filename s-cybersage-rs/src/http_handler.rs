@@ -3,7 +3,6 @@ use aws_sdk_secretsmanager::Client as SecretsClient;
 use lambda_http::{Body, Error, Request, Response};
 use serde_json::json;
 use tokio::sync::OnceCell;
-use tracing;
 
 use crate::{
     auth::verify::verify_discord_request,
@@ -28,29 +27,29 @@ pub(crate) async fn function_handler(
     secrets_client: SecretsClient,
     http_client: reqwest::Client,
 ) -> Result<Response<Body>, Error> {
-    tracing::info!("Lambda invoked");
-
     let body_bytes = event.body().as_ref();
     let body_str = std::str::from_utf8(body_bytes).unwrap_or("");
 
     let headers = event.headers();
+
     let signature = headers
         .get("x-signature-ed25519")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
+        .unwrap_or("");
+
     let timestamp = headers
         .get("x-signature-timestamp")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or_default();
+        .unwrap_or("");
 
     let secrets = SecretsManager::new_with_client(secrets_client.clone());
 
     let public_key_secret_arn = match std::env::var("DISCORD_PUBLIC_KEY_SECRET_ARN") {
-        Ok(val) => val,
+        Ok(v) => v,
         Err(_) => {
             return Ok(json_response(
                 500,
-                &json!({ "error": "Missing DISCORD_PUBLIC_KEY_SECRET_ARN" }),
+                &json!({ "error": "Server misconfiguration" }),
             ))
         }
     };
@@ -59,17 +58,16 @@ pub(crate) async fn function_handler(
         .get_secret_cached(&public_key_secret_arn, "key", &DISCORD_PUBLIC_KEY_CACHE)
         .await
     {
-        Ok(key) => key,
+        Ok(v) => v,
         Err(_) => {
             return Ok(json_response(
                 500,
-                &json!({ "error": "Failed to load Discord public key" }),
+                &json!({ "error": "Server misconfiguration" }),
             ))
         }
     };
 
-    if let Err(e) = verify_discord_request(signature, timestamp, body_bytes, &discord_public_key) {
-        tracing::warn!("Signature verification failed: {:?}", e);
+    if verify_discord_request(signature, timestamp, body_bytes, &discord_public_key).is_err() {
         return Ok(json_response(
             401,
             &json!({ "error": "Invalid request signature" }),
@@ -78,17 +76,20 @@ pub(crate) async fn function_handler(
 
     let interaction: InteractionRequest = match serde_json::from_str(body_str) {
         Ok(i) => i,
-        Err(_) => {
-            return Ok(json_response(400, &json!({ "error": "Invalid JSON" })));
-        }
+        Err(_) => return Ok(json_response(400, &json!({ "error": "Invalid JSON" }))),
+    };
+
+    let guild_id = match interaction.guild_id.as_deref() {
+        Some(id) => id,
+        None => return Ok(ephemeral_response("Guild ID missing.")),
     };
 
     let role_table = match std::env::var("ROLE_MAPPINGS_TABLE_NAME") {
-        Ok(val) => val,
+        Ok(v) => v,
         Err(_) => {
             return Ok(json_response(
                 500,
-                &json!({ "error": "Missing ROLE_MAPPINGS_TABLE_NAME" }),
+                &json!({ "error": "Server misconfiguration" }),
             ))
         }
     };
@@ -96,11 +97,11 @@ pub(crate) async fn function_handler(
     let role_db = RoleDb::new(dynamo_client.clone(), role_table);
 
     let token_secret_arn = match std::env::var("DISCORD_TOKEN_SECRET_ARN") {
-        Ok(val) => val,
+        Ok(v) => v,
         Err(_) => {
             return Ok(json_response(
                 500,
-                &json!({ "error": "Missing DISCORD_TOKEN_SECRET_ARN" }),
+                &json!({ "error": "Server misconfiguration" }),
             ))
         }
     };
@@ -109,11 +110,11 @@ pub(crate) async fn function_handler(
         .get_secret_cached(&token_secret_arn, "token", &DISCORD_TOKEN_CACHE)
         .await
     {
-        Ok(token) => token,
+        Ok(v) => v,
         Err(_) => {
             return Ok(json_response(
                 500,
-                &json!({ "error": "Failed to load Discord token" }),
+                &json!({ "error": "Server misconfiguration" }),
             ))
         }
     };
@@ -130,18 +131,20 @@ pub(crate) async fn function_handler(
                 .as_ref()
                 .and_then(|cmd| cmd.options.as_ref())
                 .and_then(|opts| opts.first())
+                .and_then(|sub| sub.options.as_ref())
+                .and_then(|sub_opts| sub_opts.first())
                 .and_then(|opt| opt.value.as_ref())
                 .and_then(|val| val.as_str())
                 .unwrap_or("");
 
             let roles = role_db
-                .query_roles_by_prefix(prefix)
+                .query_roles_by_prefix(guild_id, prefix)
                 .await
                 .unwrap_or_default();
 
             let choices: Vec<ApplicationCommandOptionChoice> = roles
                 .into_iter()
-                .map(|role_name| ApplicationCommandOptionChoice {
+                .map(|(role_name, _role_id)| ApplicationCommandOptionChoice {
                     name: role_name.clone(),
                     value: role_name,
                 })
@@ -159,95 +162,130 @@ pub(crate) async fn function_handler(
 
         InteractionType::ApplicationCommand => {
             let cmd_data: &ApplicationCommandData = match interaction.data.as_ref() {
-                Some(data) => data,
-                None => return Ok(ephemeral_response("Invalid command data")),
+                Some(d) => d,
+                None => return Ok(ephemeral_response("Invalid command data.")),
             };
 
             if cmd_data.name != "role" {
-                return Ok(ephemeral_response("Unknown command"));
+                return Ok(ephemeral_response("Unknown command."));
             }
 
-            let role_name = match cmd_data
-                .options
-                .as_ref()
-                .and_then(|opts| opts.first())
-                .and_then(|opt| opt.value.as_ref())
-                .and_then(|val| val.as_str())
-            {
-                Some(name) => name,
-                None => return Ok(ephemeral_response("Role name is missing")),
+            let subcommand = match cmd_data.options.as_ref().and_then(|o| o.first()) {
+                Some(s) => s,
+                None => return Ok(ephemeral_response("Missing subcommand.")),
             };
 
-            let role_id = match role_db.get_role_id(role_name).await {
-                Ok(Some(rid)) => rid,
-                Ok(None) => {
-                    return Ok(ephemeral_response(&format!(
-                        "Role '{}' not found",
-                        role_name
-                    )))
+            match subcommand.name.as_str() {
+                "save" => {
+                    let role_id = subcommand
+                        .options
+                        .as_ref()
+                        .and_then(|opts| opts.first())
+                        .and_then(|opt| opt.value.as_ref())
+                        .and_then(|val| val.as_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or_default();
+
+                    if role_id.is_empty() {
+                        return Ok(ephemeral_response("Role is required."));
+                    }
+
+                    let role_name = match cmd_data
+                        .resolved
+                        .as_ref()
+                        .and_then(|r| r.roles.get(&role_id))
+                        .map(|r| r.name.clone())
+                    {
+                        Some(n) => n,
+                        None => return Ok(ephemeral_response("Resolved role was missing.")),
+                    };
+
+                    if role_db
+                        .save_role(guild_id, &role_id, &role_name)
+                        .await
+                        .is_err()
+                    {
+                        return Ok(ephemeral_response("Failed to register role."));
+                    }
+
+                    return Ok(ephemeral_response("Role registered successfully."));
                 }
-                Err(_) => return Ok(ephemeral_response("Failed to lookup role")),
-            };
 
-            let guild_id = match interaction.guild_id.as_ref() {
-                Some(id) => id,
-                None => return Ok(ephemeral_response("Guild ID is missing")),
-            };
+                "toggle" => {
+                    let role_name_input = subcommand
+                        .options
+                        .as_ref()
+                        .and_then(|opts| opts.first())
+                        .and_then(|opt| opt.value.as_ref())
+                        .and_then(|val| val.as_str())
+                        .unwrap_or("")
+                        .to_string();
 
-            let user_id = match interaction.member.as_ref() {
-                Some(member) => &member.user.id,
-                None => return Ok(ephemeral_response("User information missing")),
-            };
+                    if role_name_input.is_empty() {
+                        return Ok(ephemeral_response("Role is required."));
+                    }
 
-            let member_roles =
-                match fetch_member_roles(&http_client, &discord_token, guild_id, user_id).await {
-                    Ok(roles) => roles,
-                    Err(_) => return Ok(ephemeral_response("Failed to fetch your roles")),
-                };
+                    let (role_name, role_id) = match role_db
+                        .get_role_by_name(guild_id, &role_name_input)
+                        .await
+                    {
+                        Ok(Some(role)) => role,
+                        _ => return Ok(ephemeral_response("That role is not self-assignable.")),
+                    };
 
-            let has_role = member_roles.iter().any(|r| r == &role_id);
+                    let user_id = match interaction.member.as_ref() {
+                        Some(m) => &m.user.id,
+                        None => return Ok(ephemeral_response("User missing.")),
+                    };
 
-            let success = if has_role {
-                modify_user_role(
-                    &http_client,
-                    &discord_token,
-                    guild_id,
-                    user_id,
-                    &role_id,
-                    RoleAction::Remove,
-                )
-                .await
-            } else {
-                modify_user_role(
-                    &http_client,
-                    &discord_token,
-                    guild_id,
-                    user_id,
-                    &role_id,
-                    RoleAction::Add,
-                )
-                .await
-            };
+                    let member_roles =
+                        match fetch_member_roles(&http_client, &discord_token, guild_id, user_id)
+                            .await
+                        {
+                            Ok(r) => r,
+                            Err(_) => return Ok(ephemeral_response("Failed to fetch your roles.")),
+                        };
 
-            let message = if success {
-                if has_role {
-                    format!("The '{}' role was removed from you.", role_name)
-                } else {
-                    format!("You were given the '{}' role.", role_name)
+                    let has_role = member_roles.iter().any(|r| r == &role_id);
+
+                    let action = if has_role {
+                        RoleAction::Remove
+                    } else {
+                        RoleAction::Add
+                    };
+
+                    let result = modify_user_role(
+                        &http_client,
+                        &discord_token,
+                        guild_id,
+                        user_id,
+                        &role_id,
+                        action,
+                    )
+                    .await;
+
+                    let message = match result {
+                        Ok(_) => {
+                            if has_role {
+                                format!("Removed '{}'.", role_name)
+                            } else {
+                                format!("Added '{}'.", role_name)
+                            }
+                        }
+                        Err(_) => "Failed to modify role.".to_string(),
+                    };
+
+                    InteractionResponse {
+                        kind: InteractionCallbackType::ChannelMessageWithSource,
+                        data: Some(InteractionCallbackData {
+                            content: Some(message),
+                            flags: Some(EPHEMERAL_FLAG),
+                            choices: None,
+                        }),
+                    }
                 }
-            } else if has_role {
-                "Failed to remove role.".to_string()
-            } else {
-                "Failed to add role.".to_string()
-            };
 
-            InteractionResponse {
-                kind: InteractionCallbackType::ChannelMessageWithSource,
-                data: Some(InteractionCallbackData {
-                    content: Some(message),
-                    flags: Some(EPHEMERAL_FLAG),
-                    choices: None,
-                }),
+                _ => return Ok(ephemeral_response("Unknown subcommand.")),
             }
         }
     };

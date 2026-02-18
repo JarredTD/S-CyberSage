@@ -34,6 +34,9 @@ pub struct ApplicationCommandData {
 
     #[serde(default)]
     pub options: Option<Vec<CommandOption>>,
+
+    #[serde(default)]
+    pub resolved: Option<ResolvedData>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -42,6 +45,9 @@ pub struct CommandOption {
 
     #[serde(default)]
     pub value: Option<serde_json::Value>,
+
+    #[serde(default)]
+    pub options: Option<Vec<CommandOption>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,4 +61,16 @@ pub struct Member {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct User {
     pub id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResolvedData {
+    #[serde(default)]
+    pub roles: std::collections::HashMap<String, ResolvedRole>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResolvedRole {
+    pub id: String,
+    pub name: String,
 }
