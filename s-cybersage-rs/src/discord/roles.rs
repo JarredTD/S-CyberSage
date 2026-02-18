@@ -1,5 +1,16 @@
+use anyhow::Result;
+use reqwest::Client;
+use serde_json::Value;
+use tracing;
+
+#[derive(Debug, Clone, Copy)]
+pub enum RoleAction {
+    Add,
+    Remove,
+}
+
 pub async fn fetch_member_roles(
-    client: &reqwest::Client,
+    client: &Client,
     token: &str,
     guild_id: &str,
     user_id: &str,
@@ -8,6 +19,7 @@ pub async fn fetch_member_roles(
         "https://discord.com/api/v10/guilds/{}/members/{}",
         guild_id, user_id
     );
+
     let resp = client
         .get(&url)
         .header("Authorization", format!("Bot {}", token))
@@ -15,7 +27,8 @@ pub async fn fetch_member_roles(
         .await?
         .error_for_status()?;
 
-    let json: serde_json::Value = resp.json().await?;
+    let json: Value = resp.json().await?;
+
     Ok(json
         .get("roles")
         .and_then(|roles| roles.as_array())
@@ -28,12 +41,12 @@ pub async fn fetch_member_roles(
 }
 
 pub async fn modify_user_role(
-    client: &reqwest::Client,
+    client: &Client,
     token: &str,
     guild_id: &str,
     user_id: &str,
     role_id: &str,
-    action: &str,
+    action: RoleAction,
 ) -> bool {
     let url = format!(
         "https://discord.com/api/v10/guilds/{}/members/{}/roles/{}",
@@ -41,9 +54,8 @@ pub async fn modify_user_role(
     );
 
     let request_builder = match action {
-        "add" => client.put(&url),
-        "remove" => client.delete(&url),
-        _ => return false,
+        RoleAction::Add => client.put(&url),
+        RoleAction::Remove => client.delete(&url),
     };
 
     let resp = request_builder
@@ -54,12 +66,17 @@ pub async fn modify_user_role(
     match resp {
         Ok(r) if r.status().is_success() => true,
         Ok(r) if r.status().as_u16() == 403 => {
-            tracing::error!("Bot permission error for {} role: {}", action, role_id);
+            tracing::error!(
+                "Bot permission error while {:?} role {} for user {}",
+                action,
+                role_id,
+                user_id
+            );
             false
         }
         Ok(r) => {
             tracing::error!(
-                "Failed to {} role {} for user {}: status {}",
+                "Failed to {:?} role {} for user {}: status {}",
                 action,
                 role_id,
                 user_id,

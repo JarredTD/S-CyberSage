@@ -15,48 +15,57 @@ impl RoleDb {
     }
 
     pub async fn get_role_id(&self, role_name: &str) -> Result<Option<String>> {
+        let role_name_lower = role_name.to_lowercase();
+
         let resp = self
             .client
-            .get_item()
+            .query()
             .table_name(&self.table_name)
-            .key("roleName", AttributeValue::S(role_name.to_string()))
+            .key_condition_expression("PK = :pk AND SK = :sk")
+            .expression_attribute_values(":pk", AttributeValue::S("ROLE".into()))
+            .expression_attribute_values(":sk", AttributeValue::S(role_name_lower))
+            .limit(1)
             .send()
             .await
-            .context("Failed to get item from DynamoDB")?;
+            .context("Failed to query DynamoDB for role")?;
 
-        if let Some(item) = resp.item {
-            if let Some(role_id_attr) = item.get("roleId") {
-                if let Ok(role_id) = role_id_attr.as_s() {
-                    return Ok(Some(role_id.to_owned()));
-                }
-            }
-        }
-
-        Ok(None)
+        Ok(resp
+            .items
+            .unwrap_or_default()
+            .into_iter()
+            .next()
+            .and_then(|item| item.get("roleId").cloned())
+            .and_then(|attr| attr.as_s().ok().map(|s| s.to_string())))
     }
 
-    pub async fn scan_roles_by_prefix(&self, prefix: &str) -> Result<Vec<String>> {
-        let resp = self
-            .client
-            .scan()
-            .table_name(&self.table_name)
-            .send()
-            .await
-            .context("Failed to scan DynamoDB table")?;
+    pub async fn query_roles_by_prefix(&self, prefix: &str) -> Result<Vec<String>> {
+        if prefix.is_empty() {
+            return Ok(vec![]);
+        }
 
         let prefix_lower = prefix.to_lowercase();
+
+        let resp = self
+            .client
+            .query()
+            .table_name(&self.table_name)
+            .key_condition_expression("PK = :pk AND begins_with(SK, :prefix)")
+            .expression_attribute_values(":pk", AttributeValue::S("ROLE".into()))
+            .expression_attribute_values(":prefix", AttributeValue::S(prefix_lower))
+            .limit(25)
+            .send()
+            .await
+            .context("Failed to query DynamoDB for role prefix")?;
 
         let roles = resp
             .items
             .unwrap_or_default()
             .into_iter()
             .filter_map(|item| {
-                item.get("roleName")
+                item.get("SK")
                     .and_then(|attr| attr.as_s().ok())
-                    .filter(|name| name.to_lowercase().starts_with(&prefix_lower))
-                    .map(|name| name.to_string())
+                    .map(|s| s.to_string())
             })
-            .take(25)
             .collect();
 
         Ok(roles)

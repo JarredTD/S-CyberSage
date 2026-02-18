@@ -24,9 +24,10 @@ export class CyberSageCdkStack extends Stack {
     super(scope, id, props);
 
     const roleMappingsTable = new Table(this, "RoleMappingsTable", {
-      partitionKey: { name: "roleName", type: AttributeType.STRING },
+      partitionKey: { name: "PK", type: AttributeType.STRING },
+      sortKey: { name: "SK", type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
-      removalPolicy: RemovalPolicy.DESTROY,
+      removalPolicy: RemovalPolicy.RETAIN,
     });
 
     const discordTokenSecret = new Secret(this, "DiscordTokenSecret", {
@@ -63,7 +64,7 @@ export class CyberSageCdkStack extends Stack {
         ROLE_MAPPINGS_TABLE_NAME: roleMappingsTable.tableName,
         DISCORD_TOKEN_SECRET_ARN: discordTokenSecret.secretArn,
         DISCORD_PUBLIC_KEY_SECRET_ARN: discordPublicKeySecret.secretArn,
-        RUST_LOG: "info"
+        RUST_LOG: "info",
       },
       logGroup: botLogGroup,
     });
@@ -99,7 +100,7 @@ export class CyberSageCdkStack extends Stack {
 
     const lambdaIntegration = new HttpLambdaIntegration(
       "DiscordBotIntegration",
-      discordBotHandler
+      discordBotHandler,
     );
 
     api.addRoutes({

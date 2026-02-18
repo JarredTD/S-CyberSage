@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use aws_sdk_secretsmanager::Client;
 use serde_json::Value;
+use tokio::sync::OnceCell;
 
 #[derive(Clone)]
 pub struct SecretsManager {
@@ -12,7 +13,7 @@ impl SecretsManager {
         Self { client }
     }
 
-    pub async fn get_secret(&self, secret_id: &str, key: &str) -> Result<String> {
+    async fn fetch_secret_value(&self, secret_id: &str) -> Result<Value> {
         let resp = self
             .client
             .get_secret_value()
@@ -25,8 +26,19 @@ impl SecretsManager {
             .secret_string()
             .context("Secret value is missing or not a string")?;
 
-        let json_val: Value =
-            serde_json::from_str(secret_str).context("Failed to parse secret string as JSON")?;
+        serde_json::from_str(secret_str)
+            .context("Failed to parse secret string as JSON")
+    }
+
+    pub async fn get_secret_cached(
+        &self,
+        secret_id: &str,
+        key: &str,
+        cache: &OnceCell<Value>,
+    ) -> Result<String> {
+        let json_val = cache
+            .get_or_try_init(|| async { self.fetch_secret_value(secret_id).await })
+            .await?;
 
         json_val
             .get(key)

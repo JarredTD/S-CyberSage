@@ -1,6 +1,10 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use std::convert::TryInto;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const MAX_AGE_SECONDS: i64 = 300;
+const MAX_FUTURE_SKEW: i64 = 30;
 
 pub fn verify_discord_request(
     signature_hex: &str,
@@ -8,6 +12,29 @@ pub fn verify_discord_request(
     body: &[u8],
     public_key_hex: &str,
 ) -> Result<()> {
+    if signature_hex.is_empty() || timestamp.is_empty() {
+        bail!("Missing required Discord signature headers");
+    }
+
+    let ts: i64 = timestamp
+        .parse()
+        .context("X-Signature-Timestamp is not a valid integer")?;
+
+    let now: i64 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("System time is before Unix epoch")?
+        .as_secs()
+        .try_into()
+        .context("Current unix time does not fit into i64")?;
+
+    if ts > now + MAX_FUTURE_SKEW {
+        bail!("Request timestamp is too far in the future");
+    }
+
+    if now - ts > MAX_AGE_SECONDS {
+        bail!("Request timestamp is too old");
+    }
+
     let public_key_bytes =
         hex::decode(public_key_hex).context("Failed to decode public key hex")?;
 
@@ -28,7 +55,8 @@ pub fn verify_discord_request(
 
     let signature = Signature::from_bytes(signature_array);
 
-    let mut message = timestamp.as_bytes().to_vec();
+    let mut message = Vec::with_capacity(timestamp.len() + body.len());
+    message.extend_from_slice(timestamp.as_bytes());
     message.extend_from_slice(body);
 
     public_key

@@ -17,8 +17,19 @@ async fn main() -> Result<(), Error> {
     let dynamo_client = aws_sdk_dynamodb::Client::new(&shared_config);
     let secrets_client = aws_sdk_secretsmanager::Client::new(&shared_config);
 
+    let http_client = reqwest::Client::builder()
+        .user_agent("cybersage-bot")
+        .pool_idle_timeout(std::time::Duration::from_secs(90))
+        .pool_max_idle_per_host(5)
+        .build()?;
+
     run(service_fn(move |event| {
-        http_handler::function_handler(event, dynamo_client.clone(), secrets_client.clone())
+        http_handler::function_handler(
+            event,
+            dynamo_client.clone(),
+            secrets_client.clone(),
+            http_client.clone(),
+        )
     }))
     .await
 }

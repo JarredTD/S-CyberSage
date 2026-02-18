@@ -1,36 +1,37 @@
-use anyhow::Context;
 use aws_sdk_dynamodb::Client as DynamoClient;
 use aws_sdk_secretsmanager::Client as SecretsClient;
 use lambda_http::{Body, Error, Request, Response};
-use reqwest;
 use serde_json::json;
+use tokio::sync::OnceCell;
 use tracing;
 
 use crate::{
     auth::verify::verify_discord_request,
     aws::dynamo_db::RoleDb,
     aws::secrets::SecretsManager,
-    discord::interaction_request::{InteractionData, InteractionRequest, InteractionType},
+    discord::interaction_request::{ApplicationCommandData, InteractionRequest, InteractionType},
     discord::interaction_response::{
         ApplicationCommandOptionChoice, InteractionCallbackData, InteractionCallbackType,
         InteractionResponse,
     },
-    discord::roles::{fetch_member_roles, modify_user_role},
+    discord::roles::{fetch_member_roles, modify_user_role, RoleAction},
 };
 
 const EPHEMERAL_FLAG: u64 = 1 << 6;
+
+static DISCORD_PUBLIC_KEY_CACHE: OnceCell<serde_json::Value> = OnceCell::const_new();
+static DISCORD_TOKEN_CACHE: OnceCell<serde_json::Value> = OnceCell::const_new();
 
 pub(crate) async fn function_handler(
     event: Request,
     dynamo_client: DynamoClient,
     secrets_client: SecretsClient,
+    http_client: reqwest::Client,
 ) -> Result<Response<Body>, Error> {
     tracing::info!("Lambda invoked");
-    tracing::debug!("Headers: {:?}", event.headers());
 
     let body_bytes = event.body().as_ref();
     let body_str = std::str::from_utf8(body_bytes).unwrap_or("");
-    tracing::debug!("Full request body: {}", body_str);
 
     let headers = event.headers();
     let signature = headers
@@ -42,17 +43,30 @@ pub(crate) async fn function_handler(
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default();
 
-    tracing::info!("Initializing SecretsManager wrapper");
     let secrets = SecretsManager::new_with_client(secrets_client.clone());
 
-    tracing::info!("Fetching Discord public key from SecretsManager");
-    let discord_public_key = secrets
-        .get_secret(
-            &std::env::var("DISCORD_PUBLIC_KEY_SECRET_ARN").unwrap(),
-            "key",
-        )
+    let public_key_secret_arn = match std::env::var("DISCORD_PUBLIC_KEY_SECRET_ARN") {
+        Ok(val) => val,
+        Err(_) => {
+            return Ok(json_response(
+                500,
+                &json!({ "error": "Missing DISCORD_PUBLIC_KEY_SECRET_ARN" }),
+            ))
+        }
+    };
+
+    let discord_public_key = match secrets
+        .get_secret_cached(&public_key_secret_arn, "key", &DISCORD_PUBLIC_KEY_CACHE)
         .await
-        .context("Failed to get Discord public key")?;
+    {
+        Ok(key) => key,
+        Err(_) => {
+            return Ok(json_response(
+                500,
+                &json!({ "error": "Failed to load Discord public key" }),
+            ))
+        }
+    };
 
     if let Err(e) = verify_discord_request(signature, timestamp, body_bytes, &discord_public_key) {
         tracing::warn!("Signature verification failed: {:?}", e);
@@ -61,62 +75,69 @@ pub(crate) async fn function_handler(
             &json!({ "error": "Invalid request signature" }),
         ));
     }
-    tracing::info!("Signature verified successfully");
 
     let interaction: InteractionRequest = match serde_json::from_str(body_str) {
         Ok(i) => i,
-        Err(e) => {
-            tracing::warn!("Failed to parse interaction request: {:?}", e);
+        Err(_) => {
             return Ok(json_response(400, &json!({ "error": "Invalid JSON" })));
         }
     };
 
-    tracing::info!(
-        "Received interaction of type: {:?}",
-        interaction.interaction_type
-    );
+    let role_table = match std::env::var("ROLE_MAPPINGS_TABLE_NAME") {
+        Ok(val) => val,
+        Err(_) => {
+            return Ok(json_response(
+                500,
+                &json!({ "error": "Missing ROLE_MAPPINGS_TABLE_NAME" }),
+            ))
+        }
+    };
 
-    let role_table = std::env::var("ROLE_MAPPINGS_TABLE_NAME").unwrap();
-    let role_db = RoleDb::new(dynamo_client.clone(), role_table.clone());
-    tracing::info!("Initialized RoleDb for table: {}", role_table);
+    let role_db = RoleDb::new(dynamo_client.clone(), role_table);
 
-    let discord_token = secrets
-        .get_secret(&std::env::var("DISCORD_TOKEN_SECRET_ARN").unwrap(), "token")
+    let token_secret_arn = match std::env::var("DISCORD_TOKEN_SECRET_ARN") {
+        Ok(val) => val,
+        Err(_) => {
+            return Ok(json_response(
+                500,
+                &json!({ "error": "Missing DISCORD_TOKEN_SECRET_ARN" }),
+            ))
+        }
+    };
+
+    let discord_token = match secrets
+        .get_secret_cached(&token_secret_arn, "token", &DISCORD_TOKEN_CACHE)
         .await
-        .context("Failed to get Discord token")?;
+    {
+        Ok(token) => token,
+        Err(_) => {
+            return Ok(json_response(
+                500,
+                &json!({ "error": "Failed to load Discord token" }),
+            ))
+        }
+    };
 
     let response = match interaction.interaction_type {
-        InteractionType::Ping => {
-            tracing::info!("Responding to Ping");
-            InteractionResponse {
-                kind: InteractionCallbackType::Pong,
-                data: None,
-            }
-        }
+        InteractionType::Ping => InteractionResponse {
+            kind: InteractionCallbackType::Pong,
+            data: None,
+        },
 
         InteractionType::ApplicationCommandAutocomplete => {
             let prefix = interaction
                 .data
                 .as_ref()
-                .and_then(|d| match d {
-                    InteractionData::ApplicationCommand(cmd) => {
-                        cmd.options.as_ref().and_then(|opts| opts.first())
-                    }
-                    InteractionData::None => None,
-                })
+                .and_then(|cmd| cmd.options.as_ref())
+                .and_then(|opts| opts.first())
                 .and_then(|opt| opt.value.as_ref())
-                .map(|s| s.as_str())
+                .and_then(|val| val.as_str())
                 .unwrap_or("");
 
             let roles = role_db
-                .scan_roles_by_prefix(prefix)
+                .query_roles_by_prefix(prefix)
                 .await
                 .unwrap_or_default();
-            tracing::info!(
-                "Autocomplete scan found {} roles for prefix '{}'",
-                roles.len(),
-                prefix
-            );
 
             let choices: Vec<ApplicationCommandOptionChoice> = roles
                 .into_iter()
@@ -137,89 +158,76 @@ pub(crate) async fn function_handler(
         }
 
         InteractionType::ApplicationCommand => {
-            let cmd_data = match &interaction.data {
-                Some(InteractionData::ApplicationCommand(data)) => data,
-                _ => return Ok(ephemeral_response("Invalid command data")),
+            let cmd_data: &ApplicationCommandData = match interaction.data.as_ref() {
+                Some(data) => data,
+                None => return Ok(ephemeral_response("Invalid command data")),
             };
 
             if cmd_data.name != "role" {
-                tracing::warn!("Unknown command: {}", cmd_data.name);
                 return Ok(ephemeral_response("Unknown command"));
             }
 
-            let role_name = match cmd_data.options.as_ref().and_then(|opts| opts.first()) {
-                Some(opt) => match &opt.value {
-                    Some(val) => val,
-                    None => return Ok(ephemeral_response("Role name is missing")),
-                },
+            let role_name = match cmd_data
+                .options
+                .as_ref()
+                .and_then(|opts| opts.first())
+                .and_then(|opt| opt.value.as_ref())
+                .and_then(|val| val.as_str())
+            {
+                Some(name) => name,
                 None => return Ok(ephemeral_response("Role name is missing")),
             };
 
             let role_id = match role_db.get_role_id(role_name).await {
-                Ok(Some(rid)) => {
-                    tracing::info!("Found role ID {} for role '{}'", rid, role_name);
-                    rid
-                }
+                Ok(Some(rid)) => rid,
                 Ok(None) => {
-                    tracing::warn!("Role '{}' not found in DynamoDB", role_name);
                     return Ok(ephemeral_response(&format!(
                         "Role '{}' not found",
                         role_name
-                    )));
+                    )))
                 }
-                Err(e) => {
-                    tracing::error!("Failed to lookup role '{}': {:?}", role_name, e);
-                    return Ok(ephemeral_response("Failed to lookup role"));
-                }
+                Err(_) => return Ok(ephemeral_response("Failed to lookup role")),
             };
 
-            let guild_id = match &interaction.guild_id {
+            let guild_id = match interaction.guild_id.as_ref() {
                 Some(id) => id,
                 None => return Ok(ephemeral_response("Guild ID is missing")),
             };
 
-            let user_id = match &interaction.member {
+            let user_id = match interaction.member.as_ref() {
                 Some(member) => &member.user.id,
                 None => return Ok(ephemeral_response("User information missing")),
             };
 
-            let client = reqwest::Client::new();
-            tracing::info!("Fetching member roles for user {}", user_id);
-            let member_roles = match fetch_member_roles(&client, &discord_token, guild_id, user_id)
-                .await
-            {
-                Ok(roles) => {
-                    tracing::info!("Fetched {} roles for user {}", roles.len(), user_id);
-                    roles
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to fetch member roles for user {}: {:?}", user_id, e);
-                    return Ok(ephemeral_response("Failed to fetch your roles"));
-                }
-            };
+            let member_roles =
+                match fetch_member_roles(&http_client, &discord_token, guild_id, user_id).await {
+                    Ok(roles) => roles,
+                    Err(_) => return Ok(ephemeral_response("Failed to fetch your roles")),
+                };
 
             let has_role = member_roles.iter().any(|r| r == &role_id);
 
-            tracing::info!(
-                "Modifying role '{}' for user {} (currently has role: {})",
-                role_name,
-                user_id,
-                has_role
-            );
             let success = if has_role {
                 modify_user_role(
-                    &client,
+                    &http_client,
                     &discord_token,
                     guild_id,
                     user_id,
                     &role_id,
-                    "remove",
+                    RoleAction::Remove,
                 )
                 .await
             } else {
-                modify_user_role(&client, &discord_token, guild_id, user_id, &role_id, "add").await
+                modify_user_role(
+                    &http_client,
+                    &discord_token,
+                    guild_id,
+                    user_id,
+                    &role_id,
+                    RoleAction::Add,
+                )
+                .await
             };
-            tracing::info!("Role modification success: {}", success);
 
             let message = if success {
                 if has_role {
@@ -249,7 +257,7 @@ pub(crate) async fn function_handler(
 
 fn json_response<T: serde::Serialize>(status: u16, body: &T) -> Response<Body> {
     let body_str = serde_json::to_string(body).unwrap_or_else(|_| "{}".to_string());
-    tracing::debug!("Response JSON (status {}): {}", status, body_str);
+
     Response::builder()
         .status(status)
         .header("content-type", "application/json")
@@ -266,5 +274,6 @@ fn ephemeral_response(content: &str) -> Response<Body> {
             choices: None,
         }),
     };
+
     json_response(200, &resp)
 }

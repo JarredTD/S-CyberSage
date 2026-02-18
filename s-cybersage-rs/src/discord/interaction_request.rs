@@ -10,23 +10,19 @@ pub enum InteractionType {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum InteractionData {
-    ApplicationCommand(ApplicationCommandData),
-    None,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct InteractionRequest {
     pub id: String,
     #[serde(rename = "application_id")]
     pub application_id: String,
     #[serde(rename = "type")]
     pub interaction_type: InteractionType,
+
     #[serde(default)]
-    pub data: Option<InteractionData>,
+    pub data: Option<ApplicationCommandData>,
+
     #[serde(default)]
     pub guild_id: Option<String>,
+
     #[serde(default)]
     pub member: Option<Member>,
 }
@@ -35,6 +31,7 @@ pub struct InteractionRequest {
 pub struct ApplicationCommandData {
     pub id: String,
     pub name: String,
+
     #[serde(default)]
     pub options: Option<Vec<CommandOption>>,
 }
@@ -42,12 +39,15 @@ pub struct ApplicationCommandData {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CommandOption {
     pub name: String,
-    pub value: Option<String>,
+
+    #[serde(default)]
+    pub value: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Member {
     pub user: User,
+
     #[serde(default)]
     pub roles: Vec<String>,
 }
