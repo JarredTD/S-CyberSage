@@ -8,12 +8,7 @@ import {
 import { Construct } from "constructs";
 import { RetentionDays, LogGroup } from "aws-cdk-lib/aws-logs";
 import { Function, Runtime, Code, Architecture } from "aws-cdk-lib/aws-lambda";
-import {
-  HttpApi,
-  HttpMethod,
-  CorsHttpMethod,
-  CfnStage,
-} from "aws-cdk-lib/aws-apigatewayv2";
+import { HttpApi, HttpMethod, CfnStage } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { Table, AttributeType, BillingMode } from "aws-cdk-lib/aws-dynamodb";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
@@ -23,29 +18,19 @@ export class CyberSageCdkStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    const roleMappingsTable = new Table(this, "RoleMappingsTable", {
-      partitionKey: {
-        name: "guild_id",
-        type: AttributeType.STRING,
-      },
-      sortKey: {
-        name: "entity_key",
-        type: AttributeType.STRING,
-      },
+    const roleMappingsTable = new Table(this, "GuildRoleMappingsTable", {
+      tableName: "GuildRoleMappings",
+      partitionKey: { name: "guild_id", type: AttributeType.STRING },
+      sortKey: { name: "mapping_key", type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecovery: true,
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
     roleMappingsTable.addGlobalSecondaryIndex({
-      indexName: "role-name-index",
-      partitionKey: {
-        name: "guild_id",
-        type: AttributeType.STRING,
-      },
-      sortKey: {
-        name: "role_name_key",
-        type: AttributeType.STRING,
-      },
+      indexName: "GuildRoleNameIndex",
+      partitionKey: { name: "guild_id", type: AttributeType.STRING },
+      sortKey: { name: "role_name_normalized", type: AttributeType.STRING },
     });
 
     const discordTokenSecret = new Secret(this, "DiscordTokenSecret", {
@@ -78,6 +63,7 @@ export class CyberSageCdkStack extends Stack {
       code: Code.fromAsset(lambdaZip),
       memorySize: 256,
       timeout: Duration.seconds(10),
+      reservedConcurrentExecutions: 5,
       environment: {
         ROLE_MAPPINGS_TABLE_NAME: roleMappingsTable.tableName,
         DISCORD_TOKEN_SECRET_ARN: discordTokenSecret.secretArn,
@@ -93,16 +79,6 @@ export class CyberSageCdkStack extends Stack {
 
     const api = new HttpApi(this, "DiscordBotApi", {
       description: "HTTP API for Discord bot interactions",
-      corsPreflight: {
-        allowHeaders: [
-          "Content-Type",
-          "X-Amz-Date",
-          "Authorization",
-          "X-Api-Key",
-        ],
-        allowMethods: [CorsHttpMethod.POST],
-        allowOrigins: ["*"],
-      },
       createDefaultStage: false,
     });
 

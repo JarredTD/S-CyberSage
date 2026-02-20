@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 import "source-map-support/register";
-import * as cdk from "aws-cdk-lib";
+import { App } from "aws-cdk-lib";
 import { CyberSageCdkStack } from "../lib/cybersage-stack";
+import { PaymentStack } from "../lib/payment-stack";
 
-const app = new cdk.App();
+const app = new App();
 
 const env = {
   account: process.env.CDK_DEFAULT_ACCOUNT,
   region: process.env.CDK_DEFAULT_REGION,
 };
 
+new PaymentStack(app, "S-CyberSagePaymentStack", { env });
+
 new CyberSageCdkStack(app, "S-CyberSageStack", { env });
+
 app.synth();
