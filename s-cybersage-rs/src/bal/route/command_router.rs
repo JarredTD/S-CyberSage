@@ -1,12 +1,9 @@
 use anyhow::Result;
 
 use crate::{
-    bal::{
-        discord::role_manager::{RoleAction, RoleManager},
-        subscription::SubscriptionManager,
-    },
+    bal::discord::role_manager::{RoleAction, RoleManager},
     dal::{
-        dao::guild_dao::GuildDao,
+        dao::guild::GuildDao,
         model::{
             interaction_request::{ApplicationCommandData, InteractionRequest},
             interaction_response::{ApplicationCommandOptionChoice, InteractionResponse},
@@ -17,19 +14,13 @@ use crate::{
 pub struct CommandRouter {
     guild_dao: GuildDao,
     role_manager: RoleManager,
-    subscription_manager: SubscriptionManager,
 }
 
 impl CommandRouter {
-    pub fn new(
-        guild_dao: GuildDao,
-        role_manager: RoleManager,
-        subscription_manager: SubscriptionManager,
-    ) -> Self {
+    pub fn new(guild_dao: GuildDao, role_manager: RoleManager) -> Self {
         Self {
             guild_dao,
             role_manager,
-            subscription_manager,
         }
     }
 
@@ -81,20 +72,8 @@ impl CommandRouter {
                 self.handle_role_command(guild_id, cmd_data, interaction)
                     .await
             }
-            "subscribe" => self.handle_subscribe(guild_id).await,
-            "unsubscribe" => self.handle_unsubscribe(guild_id).await,
             _ => Ok(InteractionResponse::ephemeral("Unknown command.")),
         }
-    }
-
-    async fn handle_subscribe(&self, guild_id: &str) -> Result<InteractionResponse> {
-        self.subscription_manager.subscribe(guild_id).await?;
-        Ok(InteractionResponse::ephemeral("Subscription activated."))
-    }
-
-    async fn handle_unsubscribe(&self, guild_id: &str) -> Result<InteractionResponse> {
-        self.subscription_manager.unsubscribe(guild_id).await?;
-        Ok(InteractionResponse::ephemeral("Subscription deactivated."))
     }
 
     async fn handle_role_command(

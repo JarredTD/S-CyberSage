@@ -1,4 +1,4 @@
-use aws_sdk_dynamodb::Client as DynamoClient;
+use aws_sdk_dynamodb::{Client as DynamoClient};
 use aws_sdk_secretsmanager::Client as SecretsClient;
 use lambda_http::{Body, Error, Request, Response};
 use serde_json::json;
@@ -9,10 +9,9 @@ use crate::{
         auth::verify::AuthManager,
         discord::role_manager::RoleManager,
         route::{command_router::CommandRouter, interaction_router::InteractionRouter},
-        subscription::SubscriptionManager,
     },
     dal::{
-        dao::{guild_dao::GuildDao, payment_dao::PaymentDao},
+        dao::{guild::GuildDao, subscription::SubscriptionReader},
         model::interaction_request::InteractionRequest,
         reader::secrets_reader::SecretsReader,
     },
@@ -62,10 +61,9 @@ pub(crate) async fn function_handler(
         Err(_) => return Ok(server_error()),
     };
 
-    let payment_dao = PaymentDao::new(dynamo_client.clone(), subscription_table);
-    let subscription_manager = SubscriptionManager::new(payment_dao);
+    let subscription_reader = SubscriptionReader::new(dynamo_client.clone(), subscription_table);
 
-    let auth_manager = AuthManager::new(subscription_manager.clone());
+    let auth_manager = AuthManager::new(subscription_reader.clone());
 
     if auth_manager
         .verify_signature(signature, timestamp, body_bytes, &discord_public_key)
@@ -87,11 +85,7 @@ pub(crate) async fn function_handler(
         None => return Ok(ephemeral_response("Guild ID missing.")),
     };
 
-    if !subscription_manager
-        .is_active(guild_id)
-        .await
-        .unwrap_or(false)
-    {
+    if let Err(_) = auth_manager.verify_subscription(guild_id).await {
         return Ok(ephemeral_response(
             "This guild does not have an active subscription.",
         ));
@@ -119,7 +113,7 @@ pub(crate) async fn function_handler(
 
     let role_manager = RoleManager::new(http_client.clone(), discord_token);
 
-    let command_router = CommandRouter::new(guild_dao, role_manager, subscription_manager);
+    let command_router = CommandRouter::new(guild_dao, role_manager);
 
     let interaction_router = InteractionRouter::new(command_router);
 

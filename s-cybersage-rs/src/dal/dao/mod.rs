@@ -1,2 +1,2 @@
-pub mod guild_dao;
-pub mod payment_dao;
+pub mod guild;
+pub mod subscription;

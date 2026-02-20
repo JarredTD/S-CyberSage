@@ -80,7 +80,7 @@ export class CyberSageCdkStack extends Stack {
     });
 
     roleMappingsTable.grantReadWriteData(discordBotHandler);
-    guildSubscriptionsTable.grantReadWriteData(discordBotHandler);
+    guildSubscriptionsTable.grantReadData(discordBotHandler);
     discordTokenSecret.grantRead(discordBotHandler);
     discordPublicKeySecret.grantRead(discordBotHandler);
 
