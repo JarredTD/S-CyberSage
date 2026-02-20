@@ -14,9 +14,15 @@ import { Table, AttributeType, BillingMode } from "aws-cdk-lib/aws-dynamodb";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { join } from "path";
 
+interface CyberSageStackProps extends StackProps {
+  guildSubscriptionsTable: Table;
+}
+
 export class CyberSageCdkStack extends Stack {
-  constructor(scope: Construct, id: string, props?: StackProps) {
+  constructor(scope: Construct, id: string, props: CyberSageStackProps) {
     super(scope, id, props);
+
+    const { guildSubscriptionsTable } = props;
 
     const roleMappingsTable = new Table(this, "GuildRoleMappingsTable", {
       tableName: "GuildRoleMappings",
@@ -63,9 +69,9 @@ export class CyberSageCdkStack extends Stack {
       code: Code.fromAsset(lambdaZip),
       memorySize: 256,
       timeout: Duration.seconds(10),
-      reservedConcurrentExecutions: 5,
       environment: {
         ROLE_MAPPINGS_TABLE_NAME: roleMappingsTable.tableName,
+        GUILD_SUBSCRIPTIONS_TABLE_NAME: guildSubscriptionsTable.tableName,
         DISCORD_TOKEN_SECRET_ARN: discordTokenSecret.secretArn,
         DISCORD_PUBLIC_KEY_SECRET_ARN: discordPublicKeySecret.secretArn,
         RUST_LOG: "info",
@@ -74,6 +80,7 @@ export class CyberSageCdkStack extends Stack {
     });
 
     roleMappingsTable.grantReadWriteData(discordBotHandler);
+    guildSubscriptionsTable.grantReadWriteData(discordBotHandler);
     discordTokenSecret.grantRead(discordBotHandler);
     discordPublicKeySecret.grantRead(discordBotHandler);
 

@@ -4,6 +4,7 @@ use crate::dal::dao::payment_dao::PaymentDao;
 
 const DEFAULT_SUBSCRIPTION_DURATION_SECONDS: i64 = 30 * 24 * 60 * 60;
 
+#[derive(Clone)]
 pub struct SubscriptionManager {
     payment_dao: PaymentDao,
 }

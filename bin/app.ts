@@ -11,8 +11,11 @@ const env = {
   region: process.env.CDK_DEFAULT_REGION,
 };
 
-new PaymentStack(app, "S-CyberSagePaymentStack", { env });
+const paymentStack = new PaymentStack(app, "S-CyberSagePaymentStack", { env });
 
-new CyberSageCdkStack(app, "S-CyberSageStack", { env });
+new CyberSageCdkStack(app, "S-CyberSageStack", {
+  env,
+  guildSubscriptionsTable: paymentStack.guildSubscriptionsTable,
+});
 
 app.synth();

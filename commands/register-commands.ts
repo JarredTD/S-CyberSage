@@ -40,6 +40,16 @@ const commands = [
       },
     ],
   },
+  {
+    name: "subscribe",
+    description: "Activate subscription for this guild",
+    default_member_permissions: "8",
+  },
+  {
+    name: "unsubscribe",
+    description: "Deactivate subscription for this guild",
+    default_member_permissions: "8",
+  }
 ];
 
 const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN!);

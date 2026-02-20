@@ -1,7 +1,10 @@
 use anyhow::Result;
 
 use crate::{
-    bal::discord::role_manager::{RoleAction, RoleManager},
+    bal::{
+        discord::role_manager::{RoleAction, RoleManager},
+        subscription::SubscriptionManager,
+    },
     dal::{
         dao::guild_dao::GuildDao,
         model::{
@@ -14,13 +17,19 @@ use crate::{
 pub struct CommandRouter {
     guild_dao: GuildDao,
     role_manager: RoleManager,
+    subscription_manager: SubscriptionManager,
 }
 
 impl CommandRouter {
-    pub fn new(guild_dao: GuildDao, role_manager: RoleManager) -> Self {
+    pub fn new(
+        guild_dao: GuildDao,
+        role_manager: RoleManager,
+        subscription_manager: SubscriptionManager,
+    ) -> Self {
         Self {
             guild_dao,
             role_manager,
+            subscription_manager,
         }
     }
 
@@ -67,10 +76,33 @@ impl CommandRouter {
             None => return Ok(InteractionResponse::ephemeral("Invalid command data.")),
         };
 
-        if cmd_data.name != "role" {
-            return Ok(InteractionResponse::ephemeral("Unknown command."));
+        match cmd_data.name.as_str() {
+            "role" => {
+                self.handle_role_command(guild_id, cmd_data, interaction)
+                    .await
+            }
+            "subscribe" => self.handle_subscribe(guild_id).await,
+            "unsubscribe" => self.handle_unsubscribe(guild_id).await,
+            _ => Ok(InteractionResponse::ephemeral("Unknown command.")),
         }
+    }
 
+    async fn handle_subscribe(&self, guild_id: &str) -> Result<InteractionResponse> {
+        self.subscription_manager.subscribe(guild_id).await?;
+        Ok(InteractionResponse::ephemeral("Subscription activated."))
+    }
+
+    async fn handle_unsubscribe(&self, guild_id: &str) -> Result<InteractionResponse> {
+        self.subscription_manager.unsubscribe(guild_id).await?;
+        Ok(InteractionResponse::ephemeral("Subscription deactivated."))
+    }
+
+    async fn handle_role_command(
+        &self,
+        guild_id: &str,
+        cmd_data: &ApplicationCommandData,
+        interaction: &InteractionRequest,
+    ) -> Result<InteractionResponse> {
         let subcommand = match cmd_data.options.first() {
             Some(s) => s,
             None => return Ok(InteractionResponse::ephemeral("Missing subcommand.")),

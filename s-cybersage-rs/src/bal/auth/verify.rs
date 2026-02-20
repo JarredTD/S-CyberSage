@@ -3,18 +3,21 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use std::convert::TryInto;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::dal::dao::payment_dao::PaymentDao;
+use crate::bal::subscription::SubscriptionManager;
 
 const MAX_AGE_SECONDS: i64 = 300;
 const MAX_FUTURE_SKEW: i64 = 30;
 
+#[derive(Clone)]
 pub struct AuthManager {
-    payment_dao: PaymentDao,
+    subscription_manager: SubscriptionManager,
 }
 
 impl AuthManager {
-    pub fn new(payment_dao: PaymentDao) -> Self {
-        Self { payment_dao }
+    pub fn new(subscription_manager: SubscriptionManager) -> Self {
+        Self {
+            subscription_manager,
+        }
     }
 
     pub fn verify_signature(
@@ -75,7 +78,7 @@ impl AuthManager {
     }
 
     pub async fn verify_subscription(&self, guild_id: &str) -> Result<()> {
-        let is_active = self.payment_dao.is_active(guild_id).await?;
+        let is_active = self.subscription_manager.is_active(guild_id).await?;
 
         if !is_active {
             bail!("Guild subscription is not active");

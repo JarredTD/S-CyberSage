@@ -9,6 +9,7 @@ use crate::{
         auth::verify::AuthManager,
         discord::role_manager::RoleManager,
         route::{command_router::CommandRouter, interaction_router::InteractionRouter},
+        subscription::SubscriptionManager,
     },
     dal::{
         dao::{guild_dao::GuildDao, payment_dao::PaymentDao},
@@ -62,8 +63,9 @@ pub(crate) async fn function_handler(
     };
 
     let payment_dao = PaymentDao::new(dynamo_client.clone(), subscription_table);
+    let subscription_manager = SubscriptionManager::new(payment_dao);
 
-    let auth_manager = AuthManager::new(payment_dao);
+    let auth_manager = AuthManager::new(subscription_manager.clone());
 
     if auth_manager
         .verify_signature(signature, timestamp, body_bytes, &discord_public_key)
@@ -85,7 +87,11 @@ pub(crate) async fn function_handler(
         None => return Ok(ephemeral_response("Guild ID missing.")),
     };
 
-    if auth_manager.verify_subscription(guild_id).await.is_err() {
+    if !subscription_manager
+        .is_active(guild_id)
+        .await
+        .unwrap_or(false)
+    {
         return Ok(ephemeral_response(
             "This guild does not have an active subscription.",
         ));
@@ -113,7 +119,7 @@ pub(crate) async fn function_handler(
 
     let role_manager = RoleManager::new(http_client.clone(), discord_token);
 
-    let command_router = CommandRouter::new(guild_dao, role_manager);
+    let command_router = CommandRouter::new(guild_dao, role_manager, subscription_manager);
 
     let interaction_router = InteractionRouter::new(command_router);
 

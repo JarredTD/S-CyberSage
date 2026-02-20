@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const SUBSCRIPTION_KEY: &str = "SUBSCRIPTION";
 
+#[derive(Clone)]
 pub struct PaymentDao {
     client: Client,
     table_name: String,

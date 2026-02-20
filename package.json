@@ -8,7 +8,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "predeploy": "npm run build",
-    "deploy": "bash -c 'cdk deploy \"$@\"' --",
+    "deploy": "bash -c 'cdk deploy --all \"$@\"' --",
     "register-commands": "tsx commands/register-commands.ts"
   },
   "dependencies": {
