@@ -1,9 +1,8 @@
 use lambda_http::{run, service_fn, Error};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-pub mod auth;
-pub mod aws;
-pub mod discord;
+pub mod bal;
+pub mod dal;
 pub mod http_handler;
 
 #[tokio::main]
