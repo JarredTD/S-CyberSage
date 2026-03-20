@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import "source-map-support/register";
 import { App } from "aws-cdk-lib";
-import { CyberSageCdkStack } from "../lib/cybersage-stack";
-import { PaymentStack } from "../lib/payment-stack";
+
+import { CyberSageDataStack } from "../lib/cybersage-data-stack";
+import { CyberSageControlStack } from "../lib/cybersage-control-stack";
 
 const app = new App();
 
@@ -11,11 +12,13 @@ const env = {
   region: process.env.CDK_DEFAULT_REGION,
 };
 
-const paymentStack = new PaymentStack(app, "S-CyberSagePaymentStack", { env });
-
-new CyberSageCdkStack(app, "S-CyberSageStack", {
+const dataStack = new CyberSageDataStack(app, "S-CyberSageDataStack", {
   env,
-  guildSubscriptionsTable: paymentStack.guildSubscriptionsTable,
+});
+
+new CyberSageControlStack(app, "S-CyberSageControlStack", {
+  env,
+  mainTable: dataStack.mainTable,
 });
 
 app.synth();

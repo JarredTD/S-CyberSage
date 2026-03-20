@@ -3,6 +3,8 @@ use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use tracing::{error, info, warn};
 
+const DISCORD_API_BASE: &str = "https://discord.com/api/v10";
+
 #[derive(Debug, Clone, Copy)]
 pub enum RoleAction {
     Add,
@@ -16,37 +18,37 @@ struct GuildMember {
 
 pub struct RoleManager {
     client: Client,
-    bot_token: String,
+    auth_header: String,
 }
 
 impl RoleManager {
     pub fn new(client: Client, bot_token: impl Into<String>) -> Self {
+        let token = bot_token.into();
+
         Self {
             client,
-            bot_token: bot_token.into(),
+            auth_header: format!("Bot {}", token),
         }
     }
 
     pub async fn fetch_member_roles(&self, guild_id: &str, user_id: &str) -> Result<Vec<String>> {
         let url = format!(
-            "https://discord.com/api/v10/guilds/{}/members/{}",
-            guild_id, user_id
+            "{}/guilds/{}/members/{}",
+            DISCORD_API_BASE, guild_id, user_id
         );
 
         let resp = self
             .client
             .get(&url)
-            .header("Authorization", format!("Bot {}", self.bot_token))
+            .header("Authorization", &self.auth_header)
             .send()
             .await
             .context("Failed to send fetch_member_roles request")?;
 
-        if resp.status() == StatusCode::NOT_FOUND {
-            bail!("Member not found in guild");
-        }
-
-        if resp.status() == StatusCode::FORBIDDEN {
-            bail!("Bot lacks permission to fetch member");
+        match resp.status() {
+            StatusCode::NOT_FOUND => bail!("Member not found in guild"),
+            StatusCode::FORBIDDEN => bail!("Bot lacks permission to fetch member"),
+            _ => {}
         }
 
         let resp = resp
@@ -69,17 +71,17 @@ impl RoleManager {
         action: RoleAction,
     ) -> Result<()> {
         let url = format!(
-            "https://discord.com/api/v10/guilds/{}/members/{}/roles/{}",
-            guild_id, user_id, role_id
+            "{}/guilds/{}/members/{}/roles/{}",
+            DISCORD_API_BASE, guild_id, user_id, role_id
         );
 
-        let request_builder = match action {
+        let request = match action {
             RoleAction::Add => self.client.put(&url),
             RoleAction::Remove => self.client.delete(&url),
         };
 
-        let resp = request_builder
-            .header("Authorization", format!("Bot {}", self.bot_token))
+        let resp = request
+            .header("Authorization", &self.auth_header)
             .send()
             .await
             .context("Failed to send modify_user_role request")?;
@@ -87,43 +89,59 @@ impl RoleManager {
         match resp.status() {
             status if status.is_success() => {
                 info!(
-                    "Successfully {:?} role {} for user {}",
-                    action, role_id, user_id
+                    guild_id,
+                    user_id,
+                    role_id,
+                    ?action,
+                    "Role modification succeeded"
                 );
                 Ok(())
             }
 
             StatusCode::FORBIDDEN => {
-                error!(
-                    "Permission error while {:?} role {} for user {}",
-                    action, role_id, user_id
-                );
-                bail!("Bot lacks permission to modify role (check role hierarchy)")
+                error!(guild_id, user_id, role_id, ?action, "Permission error");
+                bail!("Bot lacks permission to modify role")
             }
 
             StatusCode::NOT_FOUND => {
                 error!(
-                    "Role or user not found while {:?} role {} for user {}",
-                    action, role_id, user_id
+                    guild_id,
+                    user_id,
+                    role_id,
+                    ?action,
+                    "Role or user not found"
                 );
                 bail!("Role or user not found")
             }
 
             StatusCode::TOO_MANY_REQUESTS => {
                 let body = resp.text().await.unwrap_or_default();
+
                 warn!(
-                    "Rate limited while {:?} role {} for user {}: {}",
-                    action, role_id, user_id, body
+                    guild_id,
+                    user_id,
+                    role_id,
+                    ?action,
+                    body,
+                    "Rate limited by Discord"
                 );
+
                 bail!("Rate limited by Discord API")
             }
 
             other => {
                 let body = resp.text().await.unwrap_or_default();
+
                 error!(
-                    "Failed to {:?} role {} for user {}: status {}, body: {}",
-                    action, role_id, user_id, other, body
+                    guild_id,
+                    user_id,
+                    role_id,
+                    ?action,
+                    status = %other,
+                    body,
+                    "Discord API error"
                 );
+
                 bail!("Discord API error: {}", other);
             }
         }

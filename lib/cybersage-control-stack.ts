@@ -10,34 +10,17 @@ import { RetentionDays, LogGroup } from "aws-cdk-lib/aws-logs";
 import { Function, Runtime, Code, Architecture } from "aws-cdk-lib/aws-lambda";
 import { HttpApi, HttpMethod, CfnStage } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
-import { Table, AttributeType, BillingMode } from "aws-cdk-lib/aws-dynamodb";
+import { Table } from "aws-cdk-lib/aws-dynamodb";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { join } from "path";
 
-interface CyberSageStackProps extends StackProps {
-  guildSubscriptionsTable: Table;
+interface Props extends StackProps {
+  mainTable: Table;
 }
 
-export class CyberSageCdkStack extends Stack {
-  constructor(scope: Construct, id: string, props: CyberSageStackProps) {
+export class CyberSageControlStack extends Stack {
+  constructor(scope: Construct, id: string, props: Props) {
     super(scope, id, props);
-
-    const { guildSubscriptionsTable } = props;
-
-    const roleMappingsTable = new Table(this, "GuildRoleMappingsTable", {
-      tableName: "GuildRoleMappings",
-      partitionKey: { name: "guild_id", type: AttributeType.STRING },
-      sortKey: { name: "mapping_key", type: AttributeType.STRING },
-      billingMode: BillingMode.PAY_PER_REQUEST,
-      pointInTimeRecovery: true,
-      removalPolicy: RemovalPolicy.DESTROY,
-    });
-
-    roleMappingsTable.addGlobalSecondaryIndex({
-      indexName: "GuildRoleNameIndex",
-      partitionKey: { name: "guild_id", type: AttributeType.STRING },
-      sortKey: { name: "role_name_normalized", type: AttributeType.STRING },
-    });
 
     const discordTokenSecret = new Secret(this, "DiscordTokenSecret", {
       description: "Discord Bot Token",
@@ -55,13 +38,14 @@ export class CyberSageCdkStack extends Stack {
       },
     });
 
-    const botLogGroup = new LogGroup(this, "DiscordBotLogGroup", {
-      retention: RetentionDays.ONE_WEEK,
+    const logGroup = new LogGroup(this, "DiscordBotLogGroup", {
       logGroupName: "/aws/lambda/discord-bot-handler",
+      retention: RetentionDays.ONE_WEEK,
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
     const lambdaZip = join(__dirname, "../lambda/s-cybersage-rs/bootstrap.zip");
+
     const discordBotHandler = new Function(this, "DiscordBotHandler", {
       runtime: Runtime.PROVIDED_AL2,
       architecture: Architecture.ARM_64,
@@ -69,18 +53,16 @@ export class CyberSageCdkStack extends Stack {
       code: Code.fromAsset(lambdaZip),
       memorySize: 256,
       timeout: Duration.seconds(10),
+      logGroup,
       environment: {
-        ROLE_MAPPINGS_TABLE_NAME: roleMappingsTable.tableName,
-        GUILD_SUBSCRIPTIONS_TABLE_NAME: guildSubscriptionsTable.tableName,
+        MAIN_TABLE_NAME: props.mainTable.tableName,
         DISCORD_TOKEN_SECRET_ARN: discordTokenSecret.secretArn,
         DISCORD_PUBLIC_KEY_SECRET_ARN: discordPublicKeySecret.secretArn,
         RUST_LOG: "info",
       },
-      logGroup: botLogGroup,
     });
 
-    roleMappingsTable.grantReadWriteData(discordBotHandler);
-    guildSubscriptionsTable.grantReadData(discordBotHandler);
+    props.mainTable.grantReadWriteData(discordBotHandler);
     discordTokenSecret.grantRead(discordBotHandler);
     discordPublicKeySecret.grantRead(discordBotHandler);
 
@@ -99,20 +81,17 @@ export class CyberSageCdkStack extends Stack {
       },
     });
 
-    const lambdaIntegration = new HttpLambdaIntegration(
-      "DiscordBotIntegration",
-      discordBotHandler,
-    );
-
     api.addRoutes({
       path: "/",
       methods: [HttpMethod.POST],
-      integration: lambdaIntegration,
+      integration: new HttpLambdaIntegration(
+        "DiscordBotIntegration",
+        discordBotHandler,
+      ),
     });
 
     new CfnOutput(this, "ApiEndpoint", {
       value: `https://${api.apiId}.execute-api.${this.region}.amazonaws.com/prod/`,
-      description: "API Gateway endpoint URL for Discord interactions",
     });
   }
 }

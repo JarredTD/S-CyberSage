@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
 
-#[derive(Debug, Deserialize_repr)]
+#[derive(Debug, Deserialize_repr, Clone, Copy)]
 #[repr(u8)]
 pub enum InteractionType {
     Ping = 1,
@@ -12,7 +14,7 @@ pub enum InteractionType {
     Unknown,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct InteractionRequest {
     pub id: String,
 
@@ -32,7 +34,7 @@ pub struct InteractionRequest {
     pub member: Option<Member>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ApplicationCommandData {
     pub id: String,
     pub name: String,
@@ -44,7 +46,7 @@ pub struct ApplicationCommandData {
     pub resolved: Option<ResolvedData>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct CommandOption {
     pub name: String,
 
@@ -55,7 +57,13 @@ pub struct CommandOption {
     pub options: Vec<CommandOption>,
 }
 
-#[derive(Debug, Deserialize)]
+impl CommandOption {
+    pub fn value_as_str(&self) -> Option<&str> {
+        self.value.as_ref()?.as_str()
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Member {
     pub user: User,
 
@@ -63,18 +71,18 @@ pub struct Member {
     pub roles: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct User {
     pub id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ResolvedData {
     #[serde(default)]
-    pub roles: std::collections::HashMap<String, ResolvedRole>,
+    pub roles: HashMap<String, ResolvedRole>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ResolvedRole {
     pub id: String,
     pub name: String,

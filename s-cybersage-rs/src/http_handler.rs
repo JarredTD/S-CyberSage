@@ -1,74 +1,66 @@
-use aws_sdk_dynamodb::{Client as DynamoClient};
+use aws_sdk_dynamodb::Client as DynamoClient;
 use aws_sdk_secretsmanager::Client as SecretsClient;
-use lambda_http::{Body, Error, Request, Response};
+use lambda_http::{Body, Error, Request, RequestExt, Response};
 use serde_json::json;
 use tokio::sync::OnceCell;
 
-use crate::{
-    bal::{
-        auth::verify::AuthManager,
-        discord::role_manager::RoleManager,
-        route::{command_router::CommandRouter, interaction_router::InteractionRouter},
-    },
-    dal::{
-        dao::{guild::GuildDao, subscription::SubscriptionReader},
-        model::interaction_request::InteractionRequest,
-        reader::secrets_reader::SecretsReader,
-    },
-};
+use crate::{app_context::AppContext, dal::model::interaction_request::InteractionRequest};
 
-static DISCORD_PUBLIC_KEY_CACHE: OnceCell<serde_json::Value> = OnceCell::const_new();
-static DISCORD_TOKEN_CACHE: OnceCell<serde_json::Value> = OnceCell::const_new();
+static APP_CONTEXT: OnceCell<AppContext> = OnceCell::const_new();
 
+const SIG_HEADER: &str = "x-signature-ed25519";
+const TS_HEADER: &str = "x-signature-timestamp";
+
+#[tracing::instrument(skip(event, dynamo_client, secrets_client, http_client))]
 pub(crate) async fn function_handler(
     event: Request,
     dynamo_client: DynamoClient,
     secrets_client: SecretsClient,
     http_client: reqwest::Client,
 ) -> Result<Response<Body>, Error> {
+    let request_id = extract_request_id(&event);
+    tracing::info!(request_id = %request_id, "handling request");
+
+    let ctx = APP_CONTEXT
+        .get_or_try_init(|| async {
+            AppContext::new(dynamo_client, secrets_client, http_client).await
+        })
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to initialize app context");
+            Error::from("Failed to initialize app")
+        })?;
+
     let body_bytes = event.body().as_ref();
-    let body_str = std::str::from_utf8(body_bytes).unwrap_or("");
+
+    let body_str = match std::str::from_utf8(body_bytes) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(error = %e, "invalid utf8 body");
+            return Ok(json_response(
+                400,
+                &json!({ "error": "Invalid request body" }),
+            ));
+        }
+    };
 
     let headers = event.headers();
 
     let signature = headers
-        .get("x-signature-ed25519")
+        .get(SIG_HEADER)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
     let timestamp = headers
-        .get("x-signature-timestamp")
+        .get(TS_HEADER)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    let secrets_reader = SecretsReader::new(secrets_client.clone());
-
-    let public_key_secret_arn = match std::env::var("DISCORD_PUBLIC_KEY_SECRET_ARN") {
-        Ok(v) => v,
-        Err(_) => return Ok(server_error()),
-    };
-
-    let discord_public_key = match secrets_reader
-        .get_secret_value(&public_key_secret_arn, "key", &DISCORD_PUBLIC_KEY_CACHE)
-        .await
+    if let Err(e) =
+        ctx.auth_manager
+            .verify_signature(signature, timestamp, body_bytes, &ctx.discord_public_key)
     {
-        Ok(v) => v,
-        Err(_) => return Ok(server_error()),
-    };
-
-    let subscription_table = match std::env::var("GUILD_SUBSCRIPTIONS_TABLE_NAME") {
-        Ok(v) => v,
-        Err(_) => return Ok(server_error()),
-    };
-
-    let subscription_reader = SubscriptionReader::new(dynamo_client.clone(), subscription_table);
-
-    let auth_manager = AuthManager::new(subscription_reader.clone());
-
-    if auth_manager
-        .verify_signature(signature, timestamp, body_bytes, &discord_public_key)
-        .is_err()
-    {
+        tracing::warn!(error = %e, "signature verification failed");
         return Ok(json_response(
             401,
             &json!({ "error": "Invalid request signature" }),
@@ -77,58 +69,25 @@ pub(crate) async fn function_handler(
 
     let interaction: InteractionRequest = match serde_json::from_str(body_str) {
         Ok(i) => i,
-        Err(_) => return Ok(json_response(400, &json!({ "error": "Invalid JSON" }))),
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to parse interaction json");
+            return Ok(json_response(400, &json!({ "error": "Invalid JSON" })));
+        }
     };
 
-    let guild_id = match interaction.guild_id.as_deref() {
-        Some(id) => id,
-        None => return Ok(ephemeral_response("Guild ID missing.")),
-    };
+    tracing::debug!(interaction_type = ?interaction.interaction_type);
 
-    if let Err(_) = auth_manager.verify_subscription(guild_id).await {
-        return Ok(ephemeral_response(
-            "This guild does not have an active subscription.",
-        ));
-    }
-
-    let role_table = match std::env::var("ROLE_MAPPINGS_TABLE_NAME") {
-        Ok(v) => v,
-        Err(_) => return Ok(server_error()),
-    };
-
-    let guild_dao = GuildDao::new(dynamo_client.clone(), role_table);
-
-    let token_secret_arn = match std::env::var("DISCORD_TOKEN_SECRET_ARN") {
-        Ok(v) => v,
-        Err(_) => return Ok(server_error()),
-    };
-
-    let discord_token = match secrets_reader
-        .get_secret_value(&token_secret_arn, "token", &DISCORD_TOKEN_CACHE)
-        .await
-    {
-        Ok(v) => v,
-        Err(_) => return Ok(server_error()),
-    };
-
-    let role_manager = RoleManager::new(http_client.clone(), discord_token);
-
-    let command_router = CommandRouter::new(guild_dao, role_manager);
-
-    let interaction_router = InteractionRouter::new(command_router);
-
-    let response = match interaction_router.route(&interaction).await {
+    let response = match ctx.interaction_router.route(&interaction).await {
         Ok(r) => r,
-        Err(_) => crate::dal::model::interaction_response::InteractionResponse::ephemeral(
-            "Internal error.",
-        ),
+        Err(e) => {
+            tracing::error!(error = %e, "interaction routing failed");
+            crate::dal::model::interaction_response::InteractionResponse::ephemeral(
+                "Internal error.",
+            )
+        }
     };
 
     Ok(json_response(200, &response))
-}
-
-fn server_error() -> Response<Body> {
-    json_response(500, &json!({ "error": "Server misconfiguration" }))
 }
 
 fn json_response<T: serde::Serialize>(status: u16, body: &T) -> Response<Body> {
@@ -141,9 +100,11 @@ fn json_response<T: serde::Serialize>(status: u16, body: &T) -> Response<Body> {
         .unwrap()
 }
 
-fn ephemeral_response(content: &str) -> Response<Body> {
-    json_response(
-        200,
-        &crate::dal::model::interaction_response::InteractionResponse::ephemeral(content),
-    )
+fn extract_request_id(event: &Request) -> String {
+    match event.request_context() {
+        lambda_http::request::RequestContext::ApiGatewayV2(ctx) => ctx.request_id.clone(),
+        lambda_http::request::RequestContext::ApiGatewayV1(ctx) => ctx.request_id.clone(),
+        _ => None,
+    }
+    .unwrap_or_else(|| "unknown".to_string())
 }

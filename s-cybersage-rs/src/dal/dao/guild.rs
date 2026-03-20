@@ -1,6 +1,34 @@
 use anyhow::{Context, Result};
 use aws_sdk_dynamodb::{types::AttributeValue, Client};
 
+struct Keys;
+
+impl Keys {
+    pub fn pk(guild_id: &str) -> String {
+        format!("GUILD#{}", guild_id)
+    }
+
+    pub fn role_sk(role_name: &str) -> String {
+        format!("ROLE#{}", role_name.to_lowercase())
+    }
+
+    pub fn role_name_lookup_pk(guild_id: &str) -> String {
+        Self::pk(guild_id)
+    }
+
+    pub fn role_name_lookup_sk(role_name: &str) -> String {
+        format!("ROLE_NAME#{}", role_name.to_lowercase())
+    }
+
+    pub fn role_id_lookup_pk(guild_id: &str) -> String {
+        Self::pk(guild_id)
+    }
+
+    pub fn role_id_lookup_sk(role_id: &str) -> String {
+        format!("ROLE_ID#{}", role_id)
+    }
+}
+
 pub struct GuildDao {
     client: Client,
     table_name: String,
@@ -21,34 +49,28 @@ impl GuildDao {
     ) -> Result<Option<(String, String)>> {
         let response = self
             .client
-            .get_item()
+            .query()
             .table_name(&self.table_name)
-            .key("guild_id", AttributeValue::S(guild_id.to_string()))
-            .key(
-                "mapping_key",
-                AttributeValue::S(format!("ROLE#{}", role_id)),
+            .index_name("LookupByRoleId")
+            .key_condition_expression("role_id_lookup_pk = :pk AND role_id_lookup_sk = :sk")
+            .expression_attribute_values(
+                ":pk",
+                AttributeValue::S(Keys::role_id_lookup_pk(guild_id)),
             )
+            .expression_attribute_values(":sk", AttributeValue::S(Keys::role_id_lookup_sk(role_id)))
+            .limit(1)
             .send()
             .await
             .context("Failed to get role by ID")?;
 
-        if let Some(item) = response.item {
-            let role_name = item
-                .get("role_name")
-                .and_then(|v| v.as_s().ok())
-                .map(|s| s.to_string());
-
-            let role_id = item
-                .get("role_id")
-                .and_then(|v| v.as_s().ok())
-                .map(|s| s.to_string());
-
-            if let (Some(name), Some(id)) = (role_name, role_id) {
-                return Ok(Some((name, id)));
-            }
-        }
-
-        Ok(None)
+        Ok(response
+            .items
+            .and_then(|mut items| items.pop())
+            .and_then(|item| {
+                let name = item.get("role_name")?.as_s().ok()?.to_string();
+                let id = item.get("role_id")?.as_s().ok()?.to_string();
+                Some((name, id))
+            }))
     }
 
     pub async fn query_roles_by_prefix(
@@ -60,51 +82,69 @@ impl GuildDao {
             return Ok(vec![]);
         }
 
-        let normalized_prefix = prefix.to_lowercase();
+        let normalized = prefix.to_lowercase();
 
         let response = self
             .client
             .query()
             .table_name(&self.table_name)
-            .index_name("GuildRoleNameIndex")
+            .index_name("LookupByRoleName")
             .key_condition_expression(
-                "guild_id = :guild_id AND begins_with(role_name_normalized, :prefix)",
+                "role_name_lookup_pk = :pk AND begins_with(role_name_lookup_sk, :prefix)",
             )
-            .expression_attribute_values(":guild_id", AttributeValue::S(guild_id.to_string()))
-            .expression_attribute_values(":prefix", AttributeValue::S(normalized_prefix))
+            .expression_attribute_values(
+                ":pk",
+                AttributeValue::S(Keys::role_name_lookup_pk(guild_id)),
+            )
+            .expression_attribute_values(
+                ":prefix",
+                AttributeValue::S(format!("ROLE_NAME#{}", normalized)),
+            )
             .limit(25)
             .send()
             .await
             .context("Failed to query roles by prefix")?;
 
-        let roles = response
+        Ok(response
             .items
             .unwrap_or_default()
             .into_iter()
             .filter_map(|item| {
-                let role_name = item.get("role_name")?.as_s().ok()?.to_string();
-                let role_id = item.get("role_id")?.as_s().ok()?.to_string();
-                Some((role_name, role_id))
+                let name = item.get("role_name")?.as_s().ok()?.to_string();
+                let id = item.get("role_id")?.as_s().ok()?.to_string();
+                Some((name, id))
             })
-            .collect();
-
-        Ok(roles)
+            .collect())
     }
 
     pub async fn save_role(&self, guild_id: &str, role_id: &str, role_name: &str) -> Result<()> {
-        let normalized_name = role_name.to_lowercase();
+        let normalized = role_name.to_lowercase();
+
+        let pk = Keys::pk(guild_id);
 
         self.client
             .put_item()
             .table_name(&self.table_name)
-            .item("guild_id", AttributeValue::S(guild_id.to_string()))
-            .item(
-                "mapping_key",
-                AttributeValue::S(format!("ROLE#{}", role_id)),
-            )
+            .item("PK", AttributeValue::S(pk.clone()))
+            .item("SK", AttributeValue::S(Keys::role_sk(&normalized)))
             .item("role_id", AttributeValue::S(role_id.to_string()))
             .item("role_name", AttributeValue::S(role_name.to_string()))
-            .item("role_name_normalized", AttributeValue::S(normalized_name))
+            .item(
+                "role_name_lookup_pk",
+                AttributeValue::S(Keys::role_name_lookup_pk(guild_id)),
+            )
+            .item(
+                "role_name_lookup_sk",
+                AttributeValue::S(Keys::role_name_lookup_sk(&normalized)),
+            )
+            .item(
+                "role_id_lookup_pk",
+                AttributeValue::S(Keys::role_id_lookup_pk(guild_id)),
+            )
+            .item(
+                "role_id_lookup_sk",
+                AttributeValue::S(Keys::role_id_lookup_sk(role_id)),
+            )
             .send()
             .await
             .context("Failed to save role")?;
@@ -117,39 +157,34 @@ impl GuildDao {
         guild_id: &str,
         role_name: &str,
     ) -> Result<Option<(String, String)>> {
-        let normalized_name = role_name.to_lowercase();
+        let normalized = role_name.to_lowercase();
 
         let response = self
             .client
             .query()
             .table_name(&self.table_name)
-            .index_name("GuildRoleNameIndex")
-            .key_condition_expression("guild_id = :guild_id AND role_name_normalized = :role_name")
-            .expression_attribute_values(":guild_id", AttributeValue::S(guild_id.to_string()))
-            .expression_attribute_values(":role_name", AttributeValue::S(normalized_name))
+            .index_name("LookupByRoleName")
+            .key_condition_expression("role_name_lookup_pk = :pk AND role_name_lookup_sk = :sk")
+            .expression_attribute_values(
+                ":pk",
+                AttributeValue::S(Keys::role_name_lookup_pk(guild_id)),
+            )
+            .expression_attribute_values(
+                ":sk",
+                AttributeValue::S(Keys::role_name_lookup_sk(&normalized)),
+            )
             .limit(1)
             .send()
             .await
             .context("Failed to query role by name")?;
 
-        if let Some(mut items) = response.items {
-            if let Some(item) = items.pop() {
-                let role_name = item
-                    .get("role_name")
-                    .and_then(|v| v.as_s().ok())
-                    .map(|s| s.to_string());
-
-                let role_id = item
-                    .get("role_id")
-                    .and_then(|v| v.as_s().ok())
-                    .map(|s| s.to_string());
-
-                if let (Some(name), Some(id)) = (role_name, role_id) {
-                    return Ok(Some((name, id)));
-                }
-            }
-        }
-
-        Ok(None)
+        Ok(response
+            .items
+            .and_then(|mut items| items.pop())
+            .and_then(|item| {
+                let name = item.get("role_name")?.as_s().ok()?.to_string();
+                let id = item.get("role_id")?.as_s().ok()?.to_string();
+                Some((name, id))
+            }))
     }
 }
