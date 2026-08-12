@@ -113,3 +113,64 @@ pub struct ResolvedRole {
     /// Display name of the role.
     pub name: String,
 }
+
+/// Tests deserialization of Discord's interaction payloads from representative fixtures.
+#[cfg(test)]
+mod tests {
+    use super::{InteractionRequest, InteractionType};
+
+    /// Confirms that a guild command retains callback, permission, option, and role data.
+    #[test]
+    fn deserializes_guild_command() {
+        let interaction: InteractionRequest = serde_json::from_value(serde_json::json!({
+            "id": "interaction-id",
+            "application_id": "application-id",
+            "token": "interaction-token",
+            "type": 2,
+            "guild_id": "guild-id",
+            "member": { "permissions": "8", "user": { "id": "user-id" } },
+            "data": {
+                "name": "role",
+                "options": [{
+                    "name": "save",
+                    "options": [{ "name": "role", "value": "role-id" }]
+                }],
+                "resolved": { "roles": { "role-id": { "name": "Moderator" } } }
+            }
+        }))
+        .expect("fixture should match Discord's interaction schema");
+
+        assert!(matches!(
+            interaction.interaction_type,
+            InteractionType::ApplicationCommand
+        ));
+        assert_eq!(
+            interaction
+                .member
+                .as_ref()
+                .and_then(|member| member.permissions.as_deref()),
+            Some("8")
+        );
+        assert_eq!(
+            interaction
+                .data
+                .as_ref()
+                .and_then(|data| data.resolved.as_ref())
+                .and_then(|resolved| resolved.roles.get("role-id"))
+                .map(|role| role.name.as_str()),
+            Some("Moderator")
+        );
+    }
+
+    /// Confirms that unsupported Discord interaction types deserialize safely.
+    #[test]
+    fn deserializes_unknown_interaction_type() {
+        let interaction: InteractionRequest = serde_json::from_str(r#"{ "type": 99 }"#)
+            .expect("unknown interaction type should deserialize");
+
+        assert!(matches!(
+            interaction.interaction_type,
+            InteractionType::Unknown
+        ));
+    }
+}

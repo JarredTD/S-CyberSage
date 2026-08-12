@@ -30,6 +30,8 @@ pub struct RoleManager {
     client: Client,
     /// Preformatted bot authorization header.
     auth_header: String,
+    /// Base URL for Discord REST API requests.
+    api_base_url: String,
 }
 
 impl RoleManager {
@@ -45,7 +47,25 @@ impl RoleManager {
         Self {
             client,
             auth_header: format!("Bot {}", token),
+            api_base_url: DISCORD_API_BASE.to_string(),
         }
+    }
+
+    /// Creates a role manager that targets a custom Discord-compatible REST endpoint.
+    ///
+    /// # Arguments
+    ///
+    /// * `client` - Reusable HTTP client for REST API calls.
+    /// * `bot_token` - Token used to authenticate REST API calls.
+    /// * `api_base_url` - Base URL of the Discord-compatible REST API.
+    pub fn with_api_base_url(
+        client: Client,
+        bot_token: impl Into<String>,
+        api_base_url: impl Into<String>,
+    ) -> Self {
+        let mut manager = Self::new(client, bot_token);
+        manager.api_base_url = api_base_url.into().trim_end_matches('/').to_string();
+        manager
     }
 
     /// Retrieves the role IDs assigned to a guild member.
@@ -62,7 +82,7 @@ impl RoleManager {
     pub async fn fetch_member_roles(&self, guild_id: &str, user_id: &str) -> Result<Vec<String>> {
         let url = format!(
             "{}/guilds/{}/members/{}",
-            DISCORD_API_BASE, guild_id, user_id
+            self.api_base_url, guild_id, user_id
         );
 
         let resp = self
@@ -113,7 +133,7 @@ impl RoleManager {
     ) -> Result<()> {
         let url = format!(
             "{}/guilds/{}/members/{}/roles/{}",
-            DISCORD_API_BASE, guild_id, user_id, role_id
+            self.api_base_url, guild_id, user_id, role_id
         );
 
         let request = match action {
@@ -207,5 +227,55 @@ impl MemberRoleGateway for RoleManager {
         };
 
         RoleManager::modify_user_role(self, guild_id, user_id, role_id, action).await
+    }
+}
+
+/// Tests Discord REST adapter requests against a local HTTP server.
+#[cfg(test)]
+mod tests {
+    use super::{RoleAction, RoleManager};
+    use wiremock::{
+        matchers::{header, method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
+
+    /// Confirms that member lookup sends bot authentication and parses role IDs.
+    #[tokio::test]
+    async fn fetches_member_roles() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/guilds/guild/members/user"))
+            .and(header("authorization", "Bot token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "roles": ["role-a", "role-b"]
+            })))
+            .mount(&server)
+            .await;
+        let manager = RoleManager::with_api_base_url(reqwest::Client::new(), "token", server.uri());
+
+        let roles = manager
+            .fetch_member_roles("guild", "user")
+            .await
+            .expect("mocked Discord lookup should succeed");
+
+        assert_eq!(roles, ["role-a", "role-b"]);
+    }
+
+    /// Confirms that a role addition uses Discord's expected PUT endpoint.
+    #[tokio::test]
+    async fn adds_member_role() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/guilds/guild/members/user/roles/role"))
+            .and(header("authorization", "Bot token"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&server)
+            .await;
+        let manager = RoleManager::with_api_base_url(reqwest::Client::new(), "token", server.uri());
+
+        manager
+            .modify_user_role("guild", "user", "role", RoleAction::Add)
+            .await
+            .expect("mocked Discord role addition should succeed");
     }
 }

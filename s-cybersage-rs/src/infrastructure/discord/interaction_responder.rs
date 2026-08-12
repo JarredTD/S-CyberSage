@@ -11,6 +11,8 @@ const DISCORD_API_BASE: &str = "https://discord.com/api/v10";
 pub struct InteractionResponder {
     /// HTTP client used to call Discord's interaction webhook endpoints.
     client: reqwest::Client,
+    /// Base URL for Discord interaction webhook requests.
+    api_base_url: String,
 }
 
 impl InteractionResponder {
@@ -20,7 +22,22 @@ impl InteractionResponder {
     ///
     /// * `client` - Reusable HTTP client for Discord interaction webhook calls.
     pub fn new(client: reqwest::Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            api_base_url: DISCORD_API_BASE.to_string(),
+        }
+    }
+
+    /// Creates a responder that targets a custom Discord-compatible REST endpoint.
+    ///
+    /// # Arguments
+    ///
+    /// * `client` - Reusable HTTP client for interaction webhook calls.
+    /// * `api_base_url` - Base URL of the Discord-compatible REST API.
+    pub fn with_api_base_url(client: reqwest::Client, api_base_url: impl Into<String>) -> Self {
+        let mut responder = Self::new(client);
+        responder.api_base_url = api_base_url.into().trim_end_matches('/').to_string();
+        responder
     }
 
     /// Acknowledges a command before Discord's three-second interaction deadline.
@@ -36,7 +53,10 @@ impl InteractionResponder {
     pub async fn defer_ephemeral(&self, interaction: &InteractionRequest) -> Result<()> {
         let interaction_id = require_interaction_id(interaction)?;
         let token = require_interaction_token(interaction)?;
-        let endpoint = format!("{DISCORD_API_BASE}/interactions/{interaction_id}/{token}/callback");
+        let endpoint = format!(
+            "{}/interactions/{interaction_id}/{token}/callback",
+            self.api_base_url
+        );
 
         self.client
             .post(endpoint)
@@ -72,8 +92,10 @@ impl InteractionResponder {
             .data
             .as_ref()
             .ok_or_else(|| anyhow!("Interaction response did not contain message data"))?;
-        let endpoint =
-            format!("{DISCORD_API_BASE}/webhooks/{application_id}/{token}/messages/@original");
+        let endpoint = format!(
+            "{}/webhooks/{application_id}/{token}/messages/@original",
+            self.api_base_url
+        );
 
         self.client
             .patch(endpoint)
@@ -110,4 +132,73 @@ fn require_interaction_token(interaction: &InteractionRequest) -> Result<&str> {
         .token
         .as_deref()
         .ok_or_else(|| anyhow!("Missing interaction token"))
+}
+
+/// Tests Discord interaction webhook requests against a local HTTP server.
+#[cfg(test)]
+mod tests {
+    use super::InteractionResponder;
+    use crate::transport::discord::{
+        interaction_request::{InteractionRequest, InteractionType},
+        interaction_response::InteractionResponse,
+    };
+    use wiremock::{
+        matchers::{body_json, method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
+
+    /// Confirms that command deferral uses Discord's callback endpoint and payload.
+    #[tokio::test]
+    async fn defers_ephemeral_interaction() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/interactions/interaction/token/callback"))
+            .and(body_json(
+                serde_json::json!({ "type": 5, "data": { "flags": 64 } }),
+            ))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&server)
+            .await;
+        let responder =
+            InteractionResponder::with_api_base_url(reqwest::Client::new(), server.uri());
+
+        responder
+            .defer_ephemeral(&interaction())
+            .await
+            .expect("mocked Discord deferral should succeed");
+    }
+
+    /// Confirms that a deferred response is replaced through Discord's original-message endpoint.
+    #[tokio::test]
+    async fn updates_deferred_interaction() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/webhooks/application/token/messages/@original"))
+            .and(body_json(
+                serde_json::json!({ "content": "Done", "flags": 64 }),
+            ))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+        let responder =
+            InteractionResponder::with_api_base_url(reqwest::Client::new(), server.uri());
+
+        responder
+            .update_original_response(&interaction(), &InteractionResponse::ephemeral("Done"))
+            .await
+            .expect("mocked Discord update should succeed");
+    }
+
+    /// Builds an interaction with the identifiers required by Discord webhook endpoints.
+    fn interaction() -> InteractionRequest {
+        InteractionRequest {
+            id: Some("interaction".to_string()),
+            application_id: Some("application".to_string()),
+            token: Some("token".to_string()),
+            interaction_type: InteractionType::ApplicationCommand,
+            data: None,
+            guild_id: None,
+            member: None,
+        }
+    }
 }

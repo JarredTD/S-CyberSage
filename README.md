@@ -52,11 +52,6 @@ You must register slash commands before use.
 - `Manage Roles` — Required for the bot to add/remove roles from users
 - The bot’s highest role **must be above** any roles it is trying to assign/remove
 
-## Validation
-
-- `npm run check` formats, lints, type-checks, and runs the TypeScript and Rust tests.
-- `npm run coverage` writes TypeScript HTML/LCOV reports to `coverage/typescript` and Rust LCOV to `coverage/rust.lcov`.
-
 ## License
 
 This project is licensed under the AGPL-3.0 License. See the [LICENSE](LICENSE) file for details.

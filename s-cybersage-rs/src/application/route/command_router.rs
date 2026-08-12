@@ -462,6 +462,91 @@ mod tests {
         );
     }
 
+    /// Confirms that autocomplete returns matching registered role names.
+    #[tokio::test]
+    async fn returns_matching_autocomplete_choices() {
+        let router = CommandRouter::new(
+            Arc::new(FakeRoleRepository {
+                roles: vec![role_registration()],
+                ..Default::default()
+            }),
+            Arc::new(FakeMemberRoleGateway::default()),
+        );
+
+        let response = router
+            .handle_autocomplete(&autocomplete_interaction("mod"))
+            .await
+            .expect("autocomplete should succeed");
+
+        assert_eq!(
+            response
+                .data
+                .and_then(|data| data.choices)
+                .expect("autocomplete response should contain choices")[0]
+                .name,
+            "Moderator"
+        );
+    }
+
+    /// Confirms that an unrecognized command does not invoke dependencies.
+    #[tokio::test]
+    async fn rejects_unknown_command() {
+        let router = CommandRouter::new(
+            Arc::new(FakeRoleRepository::default()),
+            Arc::new(FakeMemberRoleGateway::default()),
+        );
+        let interaction = InteractionRequest {
+            data: Some(ApplicationCommandData {
+                name: "unknown".to_string(),
+                options: vec![],
+                resolved: None,
+            }),
+            ..interaction_with_permissions(None)
+        };
+
+        let response = router
+            .handle_command(&interaction)
+            .await
+            .expect("unknown command should produce a response");
+
+        assert_eq!(
+            response.data.and_then(|data| data.content).as_deref(),
+            Some("Unknown command.")
+        );
+    }
+
+    /// Confirms that a member who already holds a registered role has it removed.
+    #[tokio::test]
+    async fn removes_role_when_member_already_has_it() {
+        let repository = Arc::new(FakeRoleRepository {
+            roles: vec![role_registration()],
+            ..Default::default()
+        });
+        let gateway = Arc::new(FakeMemberRoleGateway {
+            member_roles: vec!["role-id".to_string()],
+            ..Default::default()
+        });
+        let router = CommandRouter::new(repository, gateway.clone());
+
+        let response = router
+            .handle_command(&toggle_interaction())
+            .await
+            .expect("toggle should succeed");
+
+        assert_eq!(
+            response.data.and_then(|data| data.content).as_deref(),
+            Some("Removed 'Moderator'.")
+        );
+        assert_eq!(
+            gateway
+                .changes
+                .lock()
+                .expect("fake gateway lock should not be poisoned")[0]
+                .3,
+            RoleMembershipAction::Remove
+        );
+    }
+
     /// Builds the minimal guild interaction required for permission checks.
     fn interaction_with_permissions(permissions: Option<&str>) -> InteractionRequest {
         InteractionRequest {
@@ -513,6 +598,23 @@ mod tests {
                     name: "toggle".to_string(),
                     value: None,
                     options: vec![role_option("Moderator")],
+                }],
+                resolved: None,
+            }),
+            ..interaction_with_permissions(None)
+        }
+    }
+
+    /// Builds an autocomplete interaction for a role-name prefix.
+    fn autocomplete_interaction(prefix: &str) -> InteractionRequest {
+        InteractionRequest {
+            interaction_type: InteractionType::ApplicationCommandAutocomplete,
+            data: Some(ApplicationCommandData {
+                name: "role".to_string(),
+                options: vec![CommandOption {
+                    name: "toggle".to_string(),
+                    value: None,
+                    options: vec![role_option(prefix)],
                 }],
                 resolved: None,
             }),

@@ -28,3 +28,6 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 panic = "abort"
+
+[dev-dependencies]
+wiremock = "0.6.5"

@@ -9,12 +9,22 @@ const MAX_AGE_SECONDS: i64 = 300;
 const MAX_FUTURE_SKEW: i64 = 30;
 
 /// Verifies signed Discord interaction requests.
-pub struct AuthManager;
+pub struct AuthManager {
+    /// Prevents external construction while retaining a stable public constructor.
+    _private: (),
+}
+
+impl Default for AuthManager {
+    /// Creates a signature verifier with default validation behavior.
+    fn default() -> Self {
+        Self { _private: () }
+    }
+}
 
 impl AuthManager {
     /// Creates a signature verifier.
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 
     /// Verifies the request timestamp and Ed25519 signature against the raw body.
@@ -114,6 +124,14 @@ mod tests {
     #[test]
     fn rejects_missing_signature() {
         let result = AuthManager::new().verify_signature("", "1", b"{}", "00");
+
+        assert!(result.is_err());
+    }
+
+    /// Confirms that the default verifier has the same behavior as an explicit constructor.
+    #[test]
+    fn default_creates_verifier() {
+        let result = AuthManager::default().verify_signature("", "1", b"{}", "00");
 
         assert!(result.is_err());
     }

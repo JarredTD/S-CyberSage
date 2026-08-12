@@ -2,7 +2,9 @@ use serde::Serialize;
 use serde_repr::Serialize_repr;
 
 bitflags::bitflags! {
+    /// Bit flags that control Discord interaction message behavior.
     pub struct MessageFlags: u64 {
+        /// Limits the message's visibility to the invoking user.
         const EPHEMERAL = 1 << 6;
     }
 }
