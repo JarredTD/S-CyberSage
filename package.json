@@ -13,6 +13,7 @@
     "lint:rust": "cargo clippy --locked --manifest-path s-cybersage-rs/Cargo.toml --all-targets -- -D warnings",
     "typecheck": "tsc --noEmit",
     "test": "cargo test --locked --manifest-path s-cybersage-rs/Cargo.toml",
+    "infra:validate": "npm run build && cdk synth",
     "audit": "npm audit --omit=dev",
     "predeploy": "npm run build",
     "deploy": "bash -c 'cdk deploy --all \"$@\"' --",
