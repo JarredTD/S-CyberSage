@@ -44,7 +44,6 @@ const commands = [
         type: 1,
         name: 'save',
         description: 'Register a role as self-assignable',
-        default_member_permissions: '8',
         options: [
           {
             name: 'role',

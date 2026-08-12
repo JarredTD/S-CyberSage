@@ -7,7 +7,8 @@ use tokio::sync::OnceCell;
 use crate::{
     app_context::AppContext,
     transport::discord::{
-        interaction_request::InteractionRequest, interaction_response::InteractionResponse,
+        interaction_request::{InteractionRequest, InteractionType},
+        interaction_response::InteractionResponse,
     },
 };
 
@@ -86,15 +87,53 @@ pub(crate) async fn function_handler(
 
     tracing::debug!(interaction_type = ?interaction.interaction_type);
 
-    let response = match ctx.interaction_router.route(&interaction).await {
+    if matches!(
+        interaction.interaction_type,
+        InteractionType::ApplicationCommand
+    ) {
+        ctx.interaction_responder
+            .defer_ephemeral(&interaction)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "failed to defer Discord interaction");
+                Error::from("Failed to defer Discord interaction")
+            })?;
+
+        let response = route_interaction(ctx, &interaction).await;
+        ctx.interaction_responder
+            .update_original_response(&interaction, &response)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "failed to update deferred Discord interaction");
+                Error::from("Failed to update Discord interaction")
+            })?;
+
+        return Ok(accepted_response());
+    }
+
+    Ok(json_response(
+        200,
+        &route_interaction(ctx, &interaction).await,
+    ))
+}
+
+/// Routes an interaction and converts application failures into a safe ephemeral response.
+async fn route_interaction(
+    ctx: &AppContext,
+    interaction: &InteractionRequest,
+) -> InteractionResponse {
+    match ctx.interaction_router.route(interaction).await {
         Ok(r) => r,
         Err(e) => {
             tracing::error!(error = %e, "interaction routing failed");
             InteractionResponse::ephemeral("Internal error.")
         }
-    };
+    }
+}
 
-    Ok(json_response(200, &response))
+/// Builds the empty acknowledgement response used after Discord accepts a deferred callback.
+fn accepted_response() -> Response<Body> {
+    Response::builder().status(202).body(Body::Empty).unwrap()
 }
 
 /// Serializes a value into a JSON HTTP response with the supplied status code.

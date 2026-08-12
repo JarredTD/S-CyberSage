@@ -15,6 +15,8 @@ pub enum InteractionCallbackType {
     Pong = 1,
     /// Creates an immediate interaction response message.
     ChannelMessageWithSource = 4,
+    /// Defers an ephemeral message while command work continues asynchronously.
+    DeferredChannelMessageWithSource = 5,
     /// Supplies choices for an autocomplete interaction.
     ApplicationCommandAutocompleteResult = 8,
 }
@@ -71,6 +73,18 @@ impl InteractionResponse {
             kind: InteractionCallbackType::ChannelMessageWithSource,
             data: Some(InteractionCallbackData {
                 content: Some(content.into()),
+                flags: Some(MessageFlags::EPHEMERAL.bits()),
+                choices: None,
+            }),
+        }
+    }
+
+    /// Builds an ephemeral acknowledgement for a command that will respond later.
+    pub fn deferred_ephemeral() -> Self {
+        Self {
+            kind: InteractionCallbackType::DeferredChannelMessageWithSource,
+            data: Some(InteractionCallbackData {
+                content: None,
                 flags: Some(MessageFlags::EPHEMERAL.bits()),
                 choices: None,
             }),

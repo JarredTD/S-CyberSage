@@ -22,6 +22,18 @@ pub enum InteractionType {
 /// Represents the subset of a Discord interaction request used by the handler.
 #[derive(Debug, Deserialize, Clone)]
 pub struct InteractionRequest {
+    /// Snowflake identifier for this interaction.
+    #[serde(default)]
+    pub id: Option<String>,
+
+    /// Snowflake identifier for the Discord application receiving the interaction.
+    #[serde(default)]
+    pub application_id: Option<String>,
+
+    /// One-time interaction token used to send follow-up interaction responses.
+    #[serde(default)]
+    pub token: Option<String>,
+
     /// Type of interaction supplied by Discord.
     #[serde(rename = "type")]
     pub interaction_type: InteractionType,
@@ -72,6 +84,10 @@ pub struct CommandOption {
 /// Represents the member that invoked a guild interaction.
 #[derive(Debug, Deserialize, Clone)]
 pub struct Member {
+    /// Guild permissions granted to the member as a decimal bitfield string.
+    #[serde(default)]
+    pub permissions: Option<String>,
+
     /// Discord user associated with the member.
     pub user: User,
 }

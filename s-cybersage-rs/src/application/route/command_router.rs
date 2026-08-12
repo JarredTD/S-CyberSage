@@ -9,6 +9,9 @@ use crate::{
     },
 };
 
+/// Bit position Discord assigns to the Administrator guild permission.
+const ADMINISTRATOR_PERMISSION: u64 = 1 << 3;
+
 /// Routes Discord role commands to persistence and Discord API operations.
 pub struct CommandRouter {
     /// Stores self-assignable roles for each guild.
@@ -90,7 +93,10 @@ impl CommandRouter {
             .ok_or_else(|| anyhow!("Missing subcommand"))?;
 
         match subcommand.name.as_str() {
-            "save" => self.handle_save(guild_id, subcommand, cmd_data).await,
+            "save" => {
+                self.handle_save(guild_id, subcommand, cmd_data, interaction)
+                    .await
+            }
             "toggle" => self.handle_toggle(guild_id, subcommand, interaction).await,
             _ => Ok(InteractionResponse::ephemeral("Unknown subcommand.")),
         }
@@ -102,7 +108,14 @@ impl CommandRouter {
         guild_id: &str,
         subcommand: &CommandOption,
         cmd_data: &ApplicationCommandData,
+        interaction: &InteractionRequest,
     ) -> Result<InteractionResponse> {
+        if !has_administrator_permission(interaction) {
+            return Ok(InteractionResponse::ephemeral(
+                "Administrator permission is required to register roles.",
+            ));
+        }
+
         let role_id = subcommand
             .options
             .first()
@@ -192,6 +205,16 @@ fn require_user_id(interaction: &InteractionRequest) -> Result<&str> {
         .ok_or_else(|| anyhow!("Missing user_id"))
 }
 
+/// Returns whether Discord supplied the Administrator permission for the invoking member.
+fn has_administrator_permission(interaction: &InteractionRequest) -> bool {
+    interaction
+        .member
+        .as_ref()
+        .and_then(|member| member.permissions.as_deref())
+        .and_then(|permissions| permissions.parse::<u64>().ok())
+        .is_some_and(|permissions| permissions & ADMINISTRATOR_PERMISSION != 0)
+}
+
 /// Extracts the focused option value from an autocomplete command payload.
 fn extract_first_option_value(cmd: &ApplicationCommandData) -> Option<&str> {
     cmd.options
@@ -199,4 +222,53 @@ fn extract_first_option_value(cmd: &ApplicationCommandData) -> Option<&str> {
         .and_then(|sub| sub.options.first())
         .and_then(|opt: &CommandOption| opt.value.as_ref())
         .and_then(|val| val.as_str())
+}
+
+/// Tests authorization decisions based on Discord's signed member permissions.
+#[cfg(test)]
+mod tests {
+    use super::has_administrator_permission;
+    use crate::transport::discord::interaction_request::{
+        InteractionRequest, InteractionType, Member, User,
+    };
+
+    /// Confirms that the Administrator permission grants access to role registration.
+    #[test]
+    fn permits_administrator() {
+        assert!(has_administrator_permission(&interaction_with_permissions(
+            Some("8")
+        )));
+    }
+
+    /// Confirms that absent, malformed, and unrelated permissions are denied.
+    #[test]
+    fn denies_non_administrators() {
+        assert!(!has_administrator_permission(
+            &interaction_with_permissions(None)
+        ));
+        assert!(!has_administrator_permission(
+            &interaction_with_permissions(Some("invalid"))
+        ));
+        assert!(!has_administrator_permission(
+            &interaction_with_permissions(Some("32"))
+        ));
+    }
+
+    /// Builds the minimal guild interaction required for permission checks.
+    fn interaction_with_permissions(permissions: Option<&str>) -> InteractionRequest {
+        InteractionRequest {
+            id: None,
+            application_id: None,
+            token: None,
+            interaction_type: InteractionType::ApplicationCommand,
+            data: None,
+            guild_id: Some("guild".to_string()),
+            member: Some(Member {
+                permissions: permissions.map(str::to_string),
+                user: User {
+                    id: "user".to_string(),
+                },
+            }),
+        }
+    }
 }
