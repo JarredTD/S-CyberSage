@@ -1,14 +1,11 @@
+use athenaeum::{auth::InteractionVerifier, http::InteractionResponder};
 use aws_sdk_dynamodb::Client as DynamoClient;
 use aws_sdk_secretsmanager::Client as SecretsClient;
 
 use crate::{
-    application::{
-        auth::verify::AuthManager,
-        route::{command_router::CommandRouter, interaction_router::InteractionRouter},
-    },
+    application::route::{command_router::CommandRouter, interaction_router::InteractionRouter},
     infrastructure::{
-        dao::guild::GuildDao,
-        discord::{interaction_responder::InteractionResponder, role_manager::RoleManager},
+        dao::guild::GuildDao, discord::role_manager::RoleManager,
         reader::secrets_reader::SecretsReader,
     },
 };
@@ -16,7 +13,7 @@ use crate::{
 /// Holds initialized services shared across Lambda invocations.
 pub struct AppContext {
     /// Verifies signatures on incoming Discord interactions.
-    pub auth_manager: AuthManager,
+    pub interaction_verifier: InteractionVerifier,
     /// Routes verified interactions to application handlers.
     pub interaction_router: InteractionRouter<GuildDao, RoleManager>,
     /// Sends lifecycle responses for commands that exceed Discord's inline deadline.
@@ -61,7 +58,7 @@ impl AppContext {
         let interaction_router = InteractionRouter::new(command_router);
 
         Ok(Self {
-            auth_manager: AuthManager::new(),
+            interaction_verifier: InteractionVerifier::new(),
             interaction_router,
             interaction_responder: InteractionResponder::new(http),
             discord_public_key,

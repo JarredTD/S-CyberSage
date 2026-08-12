@@ -1,16 +1,11 @@
+use athenaeum::interaction::{Interaction, InteractionKind, InteractionResponse};
 use aws_sdk_dynamodb::Client as DynamoClient;
 use aws_sdk_secretsmanager::Client as SecretsClient;
 use lambda_http::{Body, Error, Request, RequestExt, Response};
 use serde_json::json;
 use tokio::sync::OnceCell;
 
-use crate::{
-    app_context::AppContext,
-    transport::discord::{
-        interaction_request::{InteractionRequest, InteractionType},
-        interaction_response::InteractionResponse,
-    },
-};
+use crate::{app_context::AppContext, application::route::command_data::ApplicationCommandData};
 
 /// Lazily initialized services reused by warm Lambda invocations.
 static APP_CONTEXT: OnceCell<AppContext> = OnceCell::const_new();
@@ -79,8 +74,8 @@ pub(crate) async fn function_handler(
         .unwrap_or("");
 
     if let Err(e) =
-        ctx.auth_manager
-            .verify_signature(signature, timestamp, body_bytes, &ctx.discord_public_key)
+        ctx.interaction_verifier
+            .verify(signature, timestamp, body_bytes, &ctx.discord_public_key)
     {
         tracing::warn!(error = %e, "signature verification failed");
         return Ok(json_response(
@@ -89,7 +84,7 @@ pub(crate) async fn function_handler(
         ));
     }
 
-    let interaction: InteractionRequest = match serde_json::from_str(body_str) {
+    let interaction: Interaction<ApplicationCommandData> = match serde_json::from_str(body_str) {
         Ok(i) => i,
         Err(e) => {
             tracing::warn!(error = %e, "failed to parse interaction json");
@@ -97,12 +92,9 @@ pub(crate) async fn function_handler(
         }
     };
 
-    tracing::debug!(interaction_type = ?interaction.interaction_type);
+    tracing::debug!(interaction_type = ?interaction.kind);
 
-    if matches!(
-        interaction.interaction_type,
-        InteractionType::ApplicationCommand
-    ) {
+    if matches!(interaction.kind, InteractionKind::ApplicationCommand) {
         ctx.interaction_responder
             .defer_ephemeral(&interaction)
             .await
@@ -132,7 +124,7 @@ pub(crate) async fn function_handler(
 /// Routes an interaction and converts application failures into a safe ephemeral response.
 async fn route_interaction(
     ctx: &AppContext,
-    interaction: &InteractionRequest,
+    interaction: &Interaction<ApplicationCommandData>,
 ) -> InteractionResponse {
     match ctx.interaction_router.route(interaction).await {
         Ok(r) => r,

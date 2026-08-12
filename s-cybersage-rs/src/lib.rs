@@ -10,14 +10,12 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 /// Builds the shared dependencies used by request handling.
 mod app_context;
-/// Contains the interaction routing and authorization use cases.
+/// Contains interaction routing and CyberSage-specific command behavior.
 pub mod application;
 /// Receives and validates HTTP interactions from Discord.
 pub mod http_handler;
 /// Provides DynamoDB and Secrets Manager adapters.
 pub mod infrastructure;
-/// Defines inbound and outbound protocol representations.
-pub mod transport;
 
 /// Initializes shared AWS and HTTP clients, then starts the Lambda runtime.
 ///

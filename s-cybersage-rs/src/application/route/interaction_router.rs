@@ -1,10 +1,7 @@
 use anyhow::Result;
+use athenaeum::interaction::{Interaction, InteractionKind, InteractionResponse};
 
-use crate::transport::discord::{
-    interaction_request::{InteractionRequest, InteractionType},
-    interaction_response::InteractionResponse,
-};
-
+use super::command_data::ApplicationCommandData;
 use super::command_router::CommandRouter;
 use crate::application::ports::{GuildRoleRepository, MemberRoleGateway};
 
@@ -41,16 +38,19 @@ where
     /// Returns an error when the delegated command handler cannot read or update its backing
     /// services.
     #[tracing::instrument(skip(self, interaction))]
-    pub async fn route(&self, interaction: &InteractionRequest) -> Result<InteractionResponse> {
-        match interaction.interaction_type {
-            InteractionType::Ping => Ok(InteractionResponse::pong()),
-            InteractionType::ApplicationCommandAutocomplete => {
+    pub async fn route(
+        &self,
+        interaction: &Interaction<ApplicationCommandData>,
+    ) -> Result<InteractionResponse> {
+        match interaction.kind {
+            InteractionKind::Ping => Ok(InteractionResponse::pong()),
+            InteractionKind::ApplicationCommandAutocomplete => {
                 self.command_router.handle_autocomplete(interaction).await
             }
-            InteractionType::ApplicationCommand => {
+            InteractionKind::ApplicationCommand => {
                 self.command_router.handle_command(interaction).await
             }
-            InteractionType::Unknown => Ok(InteractionResponse::ephemeral(
+            InteractionKind::Unknown => Ok(InteractionResponse::ephemeral(
                 "Unsupported interaction type.",
             )),
         }
@@ -63,18 +63,14 @@ mod tests {
     use anyhow::Result;
 
     use super::InteractionRouter;
-    use crate::{
-        application::{
-            ports::{
-                GuildRoleRepository, MemberRoleGateway, RoleMembershipAction, RoleRegistration,
-            },
-            route::command_router::CommandRouter,
-        },
-        transport::discord::{
-            interaction_request::{InteractionRequest, InteractionType},
-            interaction_response::InteractionCallbackType,
-        },
+    use crate::application::{
+        ports::{GuildRoleRepository, MemberRoleGateway, RoleMembershipAction, RoleRegistration},
+        route::{command_data::ApplicationCommandData, command_router::CommandRouter},
     };
+    use athenaeum::interaction::{Interaction, InteractionCallbackType, InteractionKind};
+
+    /// CyberSage command interaction carrying the bot's command schema.
+    type InteractionRequest = Interaction<ApplicationCommandData>;
 
     /// Provides an inert role repository for routes that do not access storage.
     struct NoopRepository;
@@ -128,7 +124,7 @@ mod tests {
     #[tokio::test]
     async fn responds_to_ping() {
         let response = router()
-            .route(&interaction(InteractionType::Ping))
+            .route(&interaction(InteractionKind::Ping))
             .await
             .expect("ping should not fail");
 
@@ -139,7 +135,7 @@ mod tests {
     #[tokio::test]
     async fn rejects_unknown_interaction() {
         let response = router()
-            .route(&interaction(InteractionType::Unknown))
+            .route(&interaction(InteractionKind::Unknown))
             .await
             .expect("unsupported interaction should produce a response");
 
@@ -155,12 +151,12 @@ mod tests {
     }
 
     /// Builds the minimal interaction required to test its type-based routing.
-    fn interaction(interaction_type: InteractionType) -> InteractionRequest {
+    fn interaction(kind: InteractionKind) -> InteractionRequest {
         InteractionRequest {
             id: None,
             application_id: None,
             token: None,
-            interaction_type,
+            kind,
             data: None,
             guild_id: None,
             member: None,

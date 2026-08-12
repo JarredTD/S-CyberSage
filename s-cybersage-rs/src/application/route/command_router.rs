@@ -1,14 +1,14 @@
 use anyhow::{anyhow, Result};
+use athenaeum::interaction::{ApplicationCommandOptionChoice, Interaction, InteractionResponse};
 
-use crate::{
-    application::ports::{
-        GuildRoleRepository, MemberRoleGateway, RoleMembershipAction, RoleRegistration,
-    },
-    transport::discord::{
-        interaction_request::{ApplicationCommandData, CommandOption, InteractionRequest},
-        interaction_response::{ApplicationCommandOptionChoice, InteractionResponse},
-    },
+use crate::application::ports::{
+    GuildRoleRepository, MemberRoleGateway, RoleMembershipAction, RoleRegistration,
 };
+
+use super::command_data::{ApplicationCommandData, CommandOption};
+
+/// CyberSage command interaction carrying the bot's command schema.
+type InteractionRequest = Interaction<ApplicationCommandData>;
 
 /// Bit position Discord assigns to the Administrator guild permission.
 const ADMINISTRATOR_PERMISSION: u64 = 1 << 3;
@@ -52,7 +52,7 @@ where
     /// Returns an error when the interaction lacks a guild ID or DynamoDB cannot retrieve roles.
     pub async fn handle_autocomplete(
         &self,
-        interaction: &InteractionRequest,
+        interaction: &Interaction<ApplicationCommandData>,
     ) -> Result<InteractionResponse> {
         let guild_id = require_guild_id(interaction)?;
 
@@ -91,7 +91,7 @@ where
     #[tracing::instrument(skip(self, interaction))]
     pub async fn handle_command(
         &self,
-        interaction: &InteractionRequest,
+        interaction: &Interaction<ApplicationCommandData>,
     ) -> Result<InteractionResponse> {
         let guild_id = require_guild_id(interaction)?;
 
@@ -277,13 +277,14 @@ mod tests {
     use anyhow::Result;
 
     use super::{has_administrator_permission, CommandRouter};
-    use crate::application::ports::{
-        GuildRoleRepository, MemberRoleGateway, RoleMembershipAction, RoleRegistration,
+    use crate::application::{
+        ports::{GuildRoleRepository, MemberRoleGateway, RoleMembershipAction, RoleRegistration},
+        route::command_data::{ApplicationCommandData, CommandOption, ResolvedData, ResolvedRole},
     };
-    use crate::transport::discord::interaction_request::{
-        ApplicationCommandData, CommandOption, InteractionRequest, InteractionType, Member,
-        ResolvedData, ResolvedRole, User,
-    };
+    use athenaeum::interaction::{Interaction, InteractionKind, Member, User};
+
+    /// CyberSage command interaction carrying the bot's command schema.
+    type InteractionRequest = Interaction<ApplicationCommandData>;
 
     /// Stores interactions made with a fake role-registration repository.
     #[derive(Default)]
@@ -600,7 +601,7 @@ mod tests {
             id: None,
             application_id: None,
             token: None,
-            interaction_type: InteractionType::ApplicationCommand,
+            kind: InteractionKind::ApplicationCommand,
             data: None,
             guild_id: Some("guild".to_string()),
             member: Some(Member {
@@ -655,7 +656,7 @@ mod tests {
     /// Builds an autocomplete interaction for a role-name prefix.
     fn autocomplete_interaction(prefix: &str) -> InteractionRequest {
         InteractionRequest {
-            interaction_type: InteractionType::ApplicationCommandAutocomplete,
+            kind: InteractionKind::ApplicationCommandAutocomplete,
             data: Some(ApplicationCommandData {
                 name: "role".to_string(),
                 options: vec![CommandOption {
