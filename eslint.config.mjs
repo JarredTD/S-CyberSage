@@ -64,4 +64,10 @@ export default [
       'jsdoc/require-returns-description': 'error',
     },
   },
+  {
+    files: ['test/**/*.test.ts'],
+    rules: {
+      'jsdoc/require-jsdoc': 'off',
+    },
+  },
 ];

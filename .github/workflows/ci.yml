@@ -30,4 +30,6 @@ jobs:
 
       - run: npm ci
       - run: npm run check
+      - run: cargo install cargo-llvm-cov --version 0.8.7 --locked
+      - run: npm run coverage
       - run: npm run infra:validate

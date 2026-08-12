@@ -103,3 +103,51 @@ impl InteractionResponse {
         }
     }
 }
+
+/// Tests JSON payloads sent to Discord's interaction API.
+#[cfg(test)]
+mod tests {
+    use super::{ApplicationCommandOptionChoice, InteractionResponse};
+
+    /// Confirms that ordinary messages are marked ephemeral.
+    #[test]
+    fn serializes_ephemeral_message() {
+        let response = InteractionResponse::ephemeral("Saved");
+
+        assert_eq!(
+            serde_json::to_value(response).expect("response should serialize"),
+            serde_json::json!({
+                "type": 4,
+                "data": { "content": "Saved", "flags": 64 }
+            })
+        );
+    }
+
+    /// Confirms that command deferrals preserve ephemeral visibility.
+    #[test]
+    fn serializes_ephemeral_deferral() {
+        let response = InteractionResponse::deferred_ephemeral();
+
+        assert_eq!(
+            serde_json::to_value(response).expect("response should serialize"),
+            serde_json::json!({ "type": 5, "data": { "flags": 64 } })
+        );
+    }
+
+    /// Confirms that autocomplete responses contain Discord-compatible choices.
+    #[test]
+    fn serializes_autocomplete_choices() {
+        let response = InteractionResponse::autocomplete(vec![ApplicationCommandOptionChoice {
+            name: "Moderator".to_string(),
+            value: "Moderator".to_string(),
+        }]);
+
+        assert_eq!(
+            serde_json::to_value(response).expect("response should serialize"),
+            serde_json::json!({
+                "type": 8,
+                "data": { "choices": [{ "name": "Moderator", "value": "Moderator" }] }
+            })
+        );
+    }
+}

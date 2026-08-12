@@ -71,3 +71,47 @@ impl AuthManager {
         Ok(())
     }
 }
+
+/// Tests Discord request signature verification without external dependencies.
+#[cfg(test)]
+mod tests {
+    use super::AuthManager;
+    use ed25519_dalek::{Signer, SigningKey};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    /// Verifies a correctly signed current request.
+    #[test]
+    fn accepts_valid_signature() {
+        let signing_key = SigningKey::from_bytes(&[7; 32]);
+        let body = br#"{\"type\":1}"#;
+        let timestamp = current_timestamp();
+        let message = [timestamp.as_bytes(), body].concat();
+        let signature = signing_key.sign(&message);
+
+        let result = AuthManager::new().verify_signature(
+            &hex::encode(signature.to_bytes()),
+            &timestamp,
+            body,
+            &hex::encode(signing_key.verifying_key().to_bytes()),
+        );
+
+        assert!(result.is_ok());
+    }
+
+    /// Rejects a request with a missing signature header.
+    #[test]
+    fn rejects_missing_signature() {
+        let result = AuthManager::new().verify_signature("", "1", b"{}", "00");
+
+        assert!(result.is_err());
+    }
+
+    /// Returns a timestamp that falls within the verifier's accepted time window.
+    fn current_timestamp() -> String {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after the Unix epoch")
+            .as_secs()
+            .to_string()
+    }
+}
