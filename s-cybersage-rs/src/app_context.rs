@@ -2,12 +2,12 @@ use aws_sdk_dynamodb::Client as DynamoClient;
 use aws_sdk_secretsmanager::Client as SecretsClient;
 
 use crate::{
-    bal::{
+    application::{
         auth::verify::AuthManager,
         discord::role_manager::RoleManager,
         route::{command_router::CommandRouter, interaction_router::InteractionRouter},
     },
-    dal::{dao::guild::GuildDao, reader::secrets_reader::SecretsReader},
+    infrastructure::{dao::guild::GuildDao, reader::secrets_reader::SecretsReader},
 };
 
 pub struct AppContext {

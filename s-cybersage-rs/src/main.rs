@@ -5,9 +5,9 @@ use lambda_http::{run, service_fn, Error};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 mod app_context;
-mod bal;
-mod dal;
+mod application;
 mod http_handler;
+mod infrastructure;
 mod transport;
 
 #[tokio::main]

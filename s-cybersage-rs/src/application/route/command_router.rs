@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Result};
 
 use crate::{
-    bal::discord::role_manager::{RoleAction, RoleManager},
-    dal::dao::guild::GuildDao,
+    application::discord::role_manager::{RoleAction, RoleManager},
+    infrastructure::dao::guild::GuildDao,
     transport::discord::{
         interaction_request::{ApplicationCommandData, CommandOption, InteractionRequest},
         interaction_response::{ApplicationCommandOptionChoice, InteractionResponse},
