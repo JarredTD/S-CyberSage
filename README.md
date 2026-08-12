@@ -1,57 +1,71 @@
-# S(erverless)-CyberSage
+# S-CyberSage
 
-S-CyberSage is a serverless adaptation of the CyberSage Discord bot, designed to manage self-assignable roles via slash commands.
+S-CyberSage is a serverless Discord bot for managing self-assignable roles in a single production guild. Administrators register roles, and members add or remove registered roles with slash commands.
 
-## Functionality
+The bot runs as an AWS Lambda behind API Gateway, stores role registrations in DynamoDB, and retrieves Discord credentials from Secrets Manager. Athenaeum provides the Discord interaction primitives; CyberSage defines the role commands and policies.
 
-### Commands
+## Commands
 
-- `/role save <roleName>`
-  - Saves a role to be toggleable
-  - Requires administrator permissions
-- `/role toggle <roleName>`
-  - Toggles a role on the user
-  - Available to all users
+| Command               | Who can use it | What it does                                                |
+| --------------------- | -------------- | ----------------------------------------------------------- |
+| `/role save <role>`   | Administrators | Registers a role as self-assignable.                        |
+| `/role toggle <role>` | Any member     | Adds or removes a registered role from the invoking member. |
 
-## Setup
+`/role save` also checks the bot's effective `Manage Roles` permission and Discord's role hierarchy before it stores a role. A role cannot be registered when the bot would be unable to manage it later.
 
-### 1. Environment Variables
+## How it fits together
 
-The following environment variables are required for command registration:
+```text
+Discord interaction
+        |
+API Gateway (prod)
+        |
+Lambda — verifies Discord's Ed25519 signature
+        |
+CyberSage role policy ── DynamoDB role registrations
+        |
+Discord REST API — member role changes
+```
 
-DISCORD_TOKEN=
-DISCORD_CLIENT_ID=
-DISCORD_GUILD_ID=
+AWS CDK deploys two stacks:
 
-- **DISCORD_TOKEN** — Bot token
-- **DISCORD_CLIENT_ID** — Application (client) ID
-- **DISCORD_GUILD_ID** — Target guild for registering commands
+- `S-CyberSageDataStack` creates the pay-per-request DynamoDB table and its role lookup indexes.
+- `S-CyberSageControlStack` creates the HTTP API, ARM64 Lambda, log group, and two Secrets Manager secrets.
 
-### 2. Secrets (AWS)
+The configuration table is intentionally destroyed with the stack. It contains rebuildable role registrations, avoiding the cost of retaining an otherwise unused table after a teardown.
 
-You must manually set the values for these secrets in the account you deployed to.
+## Deploying
 
-- Token
-- Public Key
+You need Node.js 24, Rust (as specified by [`s-cybersage-rs/rust-toolchain.toml`](s-cybersage-rs/rust-toolchain.toml)), Cargo Lambda, AWS credentials for the target account, and a Discord application.
 
-### 3. Discord Configuration
+```sh
+npm ci
+npm run check
+npm run deploy
+```
 
-- Set the **Interactions Endpoint URL** in the Discord Developer Portal to your deployed API Gateway endpoint
-- This allows Discord to send interaction events to the lambda
+The first deployment creates empty Secrets Manager values. In the AWS console, set:
 
-### 4. Command Registration
+| Secret             | JSON key | Value                                                         |
+| ------------------ | -------- | ------------------------------------------------------------- |
+| Discord token      | `token`  | The bot token from the Discord Developer Portal.              |
+| Discord public key | `key`    | The application public key from the Discord Developer Portal. |
 
-You must register slash commands before use.
+CDK prints `ApiEndpoint` from the control stack. In the Discord Developer Portal, set that URL as the application's **Interactions Endpoint URL**.
 
-- Use the provided registration script (or equivalent)
-- Ensure the environment variables above are set before running
-- Guild-level registration is recommended for faster updates during development
+The bot needs `Manage Roles`, and its highest role must sit above every role it should register or assign. Discord itself does not allow bots to manage roles at or above their own highest role.
 
-## Permissions
+## Registering commands
 
-- `Manage Roles` — Required for the bot to add/remove roles from users
-- The bot’s highest role **must be above** any roles it is trying to assign/remove
+Copy the example environment file and fill in credentials for the target guild. Keep this file local: the token is a secret.
+
+```sh
+cp .env.example .env
+npm run register-commands
+```
+
+`DISCORD_GUILD_ID` scopes command registration to one guild. Guild command updates are available immediately.
 
 ## License
 
-This project is licensed under the AGPL-3.0 License. See the [LICENSE](LICENSE) file for details.
+S-CyberSage is licensed under the [GNU Affero General Public License v3.0](LICENSE).
