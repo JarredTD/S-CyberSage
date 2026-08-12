@@ -7,7 +7,7 @@ use crate::transport::discord::{
 /// Base URL for Discord's REST API.
 const DISCORD_API_BASE: &str = "https://discord.com/api/v10";
 
-/// Sends deferred and completed responses for Discord interactions.
+/// Implements deferred and completed responses for Discord interactions.
 pub struct InteractionResponder {
     /// HTTP client used to call Discord's interaction webhook endpoints.
     client: reqwest::Client,

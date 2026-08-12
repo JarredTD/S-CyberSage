@@ -24,7 +24,7 @@ struct GuildMember {
     roles: Vec<String>,
 }
 
-/// Calls Discord's REST API to inspect and update guild member roles.
+/// Implements Discord's REST API for guild member role operations.
 pub struct RoleManager {
     /// Reusable HTTP client for Discord API requests.
     client: Client,

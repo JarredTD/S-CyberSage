@@ -4,10 +4,13 @@ use aws_sdk_secretsmanager::Client as SecretsClient;
 use crate::{
     application::{
         auth::verify::AuthManager,
-        discord::{interaction_responder::InteractionResponder, role_manager::RoleManager},
         route::{command_router::CommandRouter, interaction_router::InteractionRouter},
     },
-    infrastructure::{dao::guild::GuildDao, reader::secrets_reader::SecretsReader},
+    infrastructure::{
+        dao::guild::GuildDao,
+        discord::{interaction_responder::InteractionResponder, role_manager::RoleManager},
+        reader::secrets_reader::SecretsReader,
+    },
 };
 
 /// Holds initialized services shared across Lambda invocations.

@@ -1,7 +1,5 @@
 /// Verifies Discord interaction authenticity.
 pub mod auth;
-/// Calls Discord APIs needed by application use cases.
-pub mod discord;
 /// Defines dependencies required by application use cases.
 pub mod ports;
 /// Routes validated interactions to command handlers.
