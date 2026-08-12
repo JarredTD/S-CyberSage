@@ -1,40 +1,51 @@
 use anyhow::{Context, Result};
 use aws_sdk_dynamodb::{types::AttributeValue, Client};
 
+/// Builds the primary and secondary index keys for guild role registrations.
 struct Keys;
 
 impl Keys {
+    /// Builds a guild partition key.
     pub fn pk(guild_id: &str) -> String {
         format!("GUILD#{}", guild_id)
     }
 
+    /// Builds a role sort key from a normalized role name.
     pub fn role_sk(role_name: &str) -> String {
         format!("ROLE#{}", role_name.to_lowercase())
     }
 
+    /// Builds the partition key for the role-name lookup index.
     pub fn role_name_lookup_pk(guild_id: &str) -> String {
         Self::pk(guild_id)
     }
 
+    /// Builds the sort key for the role-name lookup index.
     pub fn role_name_lookup_sk(role_name: &str) -> String {
         format!("ROLE_NAME#{}", role_name.to_lowercase())
     }
 
+    /// Builds the partition key for the role-ID lookup index.
     pub fn role_id_lookup_pk(guild_id: &str) -> String {
         Self::pk(guild_id)
     }
 
+    /// Builds the sort key for the role-ID lookup index.
     pub fn role_id_lookup_sk(role_id: &str) -> String {
         format!("ROLE_ID#{}", role_id)
     }
 }
 
+/// Persists and queries self-assignable roles for Discord guilds.
 pub struct GuildDao {
+    /// DynamoDB client used for table operations.
     client: Client,
+    /// Name of the application DynamoDB table.
     table_name: String,
 }
 
 impl GuildDao {
+    /// Creates a DAO bound to the supplied DynamoDB table.
     pub fn new(client: Client, table_name: impl Into<String>) -> Self {
         Self {
             client,
@@ -42,6 +53,7 @@ impl GuildDao {
         }
     }
 
+    /// Returns up to 25 saved roles whose names begin with the supplied prefix.
     pub async fn query_roles_by_prefix(
         &self,
         guild_id: &str,
@@ -86,6 +98,7 @@ impl GuildDao {
             .collect())
     }
 
+    /// Saves or replaces a guild's self-assignable role registration.
     pub async fn save_role(&self, guild_id: &str, role_id: &str, role_name: &str) -> Result<()> {
         let normalized = role_name.to_lowercase();
 
@@ -121,6 +134,7 @@ impl GuildDao {
         Ok(())
     }
 
+    /// Finds a guild's self-assignable role by a case-insensitive name.
     pub async fn get_role_by_name(
         &self,
         guild_id: &str,

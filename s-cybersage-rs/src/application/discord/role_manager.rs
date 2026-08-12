@@ -3,25 +3,35 @@ use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use tracing::{error, info, warn};
 
+/// Base URL for Discord's version 10 REST API.
 const DISCORD_API_BASE: &str = "https://discord.com/api/v10";
 
+/// Describes the role membership change to apply to a guild member.
 #[derive(Debug, Clone, Copy)]
 pub enum RoleAction {
+    /// Adds the role to the member.
     Add,
+    /// Removes the role from the member.
     Remove,
 }
 
+/// Represents the subset of a Discord guild member returned by the REST API.
 #[derive(Debug, Deserialize)]
 struct GuildMember {
+    /// Role IDs currently assigned to the member.
     roles: Vec<String>,
 }
 
+/// Calls Discord's REST API to inspect and update guild member roles.
 pub struct RoleManager {
+    /// Reusable HTTP client for Discord API requests.
     client: Client,
+    /// Preformatted bot authorization header.
     auth_header: String,
 }
 
 impl RoleManager {
+    /// Creates a role manager authenticated with the supplied Discord bot token.
     pub fn new(client: Client, bot_token: impl Into<String>) -> Self {
         let token = bot_token.into();
 
@@ -31,6 +41,7 @@ impl RoleManager {
         }
     }
 
+    /// Retrieves the role IDs assigned to a guild member.
     pub async fn fetch_member_roles(&self, guild_id: &str, user_id: &str) -> Result<Vec<String>> {
         let url = format!(
             "{}/guilds/{}/members/{}",
@@ -63,6 +74,7 @@ impl RoleManager {
         Ok(member.roles)
     }
 
+    /// Adds or removes a role from a guild member.
     pub async fn modify_user_role(
         &self,
         guild_id: &str,

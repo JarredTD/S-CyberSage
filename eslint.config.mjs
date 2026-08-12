@@ -47,14 +47,14 @@ export default [
       'jsdoc/require-jsdoc': [
         'error',
         {
-          contexts: [
-            'ExportNamedDeclaration > ClassDeclaration',
-            'ExportNamedDeclaration > FunctionDeclaration',
-            'ExportNamedDeclaration > TSInterfaceDeclaration',
-          ],
+          contexts: ['ExportNamedDeclaration > TSInterfaceDeclaration', 'TSInterfaceDeclaration'],
           require: {
+            ArrowFunctionExpression: true,
             ClassDeclaration: true,
+            ClassExpression: true,
             FunctionDeclaration: true,
+            FunctionExpression: true,
+            MethodDefinition: true,
           },
         },
       ],

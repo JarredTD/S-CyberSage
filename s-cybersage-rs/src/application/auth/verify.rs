@@ -3,16 +3,21 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use std::convert::TryInto;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Maximum accepted age for a signed Discord request.
 const MAX_AGE_SECONDS: i64 = 300;
+/// Maximum allowed future clock skew for a signed Discord request.
 const MAX_FUTURE_SKEW: i64 = 30;
 
+/// Verifies signed Discord interaction requests.
 pub struct AuthManager;
 
 impl AuthManager {
+    /// Creates a signature verifier.
     pub fn new() -> Self {
         Self
     }
 
+    /// Verifies the request timestamp and Ed25519 signature against the raw body.
     pub fn verify_signature(
         &self,
         signature_hex: &str,

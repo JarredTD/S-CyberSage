@@ -1,16 +1,20 @@
 use anyhow::Result;
 use aws_sdk_secretsmanager::Client;
 
+/// Retrieves string values from JSON secrets in AWS Secrets Manager.
 #[derive(Clone)]
 pub struct SecretsReader {
+    /// Secrets Manager client used to retrieve configured secret values.
     client: Client,
 }
 
 impl SecretsReader {
+    /// Creates a secrets reader backed by the supplied AWS client.
     pub fn new(client: Client) -> Self {
         Self { client }
     }
 
+    /// Retrieves a string field from a JSON-encoded secret.
     pub async fn get_string(&self, secret_id: &str, key: &str) -> Result<String> {
         let response = self
             .client

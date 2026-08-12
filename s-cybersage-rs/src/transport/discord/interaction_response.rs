@@ -7,42 +7,57 @@ bitflags::bitflags! {
     }
 }
 
+/// Identifies the callback protocol response sent to Discord.
 #[derive(Debug, Copy, Clone, Serialize_repr)]
 #[repr(u8)]
 pub enum InteractionCallbackType {
+    /// Acknowledges a Discord ping interaction.
     Pong = 1,
+    /// Creates an immediate interaction response message.
     ChannelMessageWithSource = 4,
+    /// Supplies choices for an autocomplete interaction.
     ApplicationCommandAutocompleteResult = 8,
 }
 
+/// Represents a response to a Discord interaction webhook.
 #[derive(Debug, Serialize)]
 pub struct InteractionResponse {
+    /// Callback type that controls Discord's response handling.
     #[serde(rename = "type")]
     pub kind: InteractionCallbackType,
 
+    /// Optional callback payload.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<InteractionCallbackData>,
 }
 
+/// Contains the message or autocomplete data in an interaction response.
 #[derive(Debug, Serialize)]
 pub struct InteractionCallbackData {
+    /// Message text to display to the invoking user.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
 
+    /// Discord message flags, such as ephemeral visibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub flags: Option<u64>,
 
+    /// Choices returned for an autocomplete interaction.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub choices: Option<Vec<ApplicationCommandOptionChoice>>,
 }
 
+/// Represents one selectable autocomplete choice.
 #[derive(Debug, Serialize)]
 pub struct ApplicationCommandOptionChoice {
+    /// Human-readable text shown in Discord.
     pub name: String,
+    /// Value submitted to the command when selected.
     pub value: String,
 }
 
 impl InteractionResponse {
+    /// Builds a response that acknowledges a Discord ping.
     pub fn pong() -> Self {
         Self {
             kind: InteractionCallbackType::Pong,
@@ -50,6 +65,7 @@ impl InteractionResponse {
         }
     }
 
+    /// Builds an ephemeral message response visible only to the invoking user.
     pub fn ephemeral(content: impl Into<String>) -> Self {
         Self {
             kind: InteractionCallbackType::ChannelMessageWithSource,
@@ -61,6 +77,7 @@ impl InteractionResponse {
         }
     }
 
+    /// Builds an autocomplete response containing the supplied choices.
     pub fn autocomplete(choices: Vec<ApplicationCommandOptionChoice>) -> Self {
         Self {
             kind: InteractionCallbackType::ApplicationCommandAutocompleteResult,

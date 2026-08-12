@@ -10,13 +10,18 @@ use crate::{
     infrastructure::{dao::guild::GuildDao, reader::secrets_reader::SecretsReader},
 };
 
+/// Holds initialized services shared across Lambda invocations.
 pub struct AppContext {
+    /// Verifies signatures on incoming Discord interactions.
     pub auth_manager: AuthManager,
+    /// Routes verified interactions to application handlers.
     pub interaction_router: InteractionRouter,
+    /// Hex-encoded Discord application public key used for verification.
     pub discord_public_key: String,
 }
 
 impl AppContext {
+    /// Initializes application services from AWS clients and Lambda configuration.
     pub async fn new(
         dynamo: DynamoClient,
         secrets: SecretsClient,

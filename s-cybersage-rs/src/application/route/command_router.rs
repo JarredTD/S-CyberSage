@@ -9,12 +9,16 @@ use crate::{
     },
 };
 
+/// Routes Discord role commands to persistence and Discord API operations.
 pub struct CommandRouter {
+    /// Stores self-assignable roles for each guild.
     guild_dao: GuildDao,
+    /// Applies role changes through Discord's REST API.
     role_manager: RoleManager,
 }
 
 impl CommandRouter {
+    /// Creates a command router from its persistence and Discord dependencies.
     pub fn new(guild_dao: GuildDao, role_manager: RoleManager) -> Self {
         Self {
             guild_dao,
@@ -22,6 +26,7 @@ impl CommandRouter {
         }
     }
 
+    /// Returns matching self-assignable roles for a Discord autocomplete interaction.
     pub async fn handle_autocomplete(
         &self,
         interaction: &InteractionRequest,
@@ -50,6 +55,7 @@ impl CommandRouter {
         Ok(InteractionResponse::autocomplete(choices))
     }
 
+    /// Handles a Discord application command interaction.
     #[tracing::instrument(skip(self, interaction))]
     pub async fn handle_command(
         &self,
@@ -71,6 +77,7 @@ impl CommandRouter {
         }
     }
 
+    /// Dispatches the requested role subcommand.
     async fn handle_role_command(
         &self,
         guild_id: &str,
@@ -89,6 +96,7 @@ impl CommandRouter {
         }
     }
 
+    /// Saves an administrator-selected role as self-assignable.
     async fn handle_save(
         &self,
         guild_id: &str,
@@ -118,6 +126,7 @@ impl CommandRouter {
         ))
     }
 
+    /// Adds or removes the selected self-assignable role for the invoking member.
     async fn handle_toggle(
         &self,
         guild_id: &str,
@@ -166,6 +175,7 @@ impl CommandRouter {
     }
 }
 
+/// Returns the guild ID required by a guild-scoped interaction.
 fn require_guild_id(interaction: &InteractionRequest) -> Result<&str> {
     interaction
         .guild_id
@@ -173,6 +183,7 @@ fn require_guild_id(interaction: &InteractionRequest) -> Result<&str> {
         .ok_or_else(|| anyhow!("Missing guild_id"))
 }
 
+/// Returns the invoking user's ID required by a guild interaction.
 fn require_user_id(interaction: &InteractionRequest) -> Result<&str> {
     interaction
         .member
@@ -181,6 +192,7 @@ fn require_user_id(interaction: &InteractionRequest) -> Result<&str> {
         .ok_or_else(|| anyhow!("Missing user_id"))
 }
 
+/// Extracts the focused option value from an autocomplete command payload.
 fn extract_first_option_value(cmd: &ApplicationCommandData) -> Option<&str> {
     cmd.options
         .first()

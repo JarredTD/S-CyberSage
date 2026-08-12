@@ -17,6 +17,13 @@ interface Props extends StackProps {
 
 /** Deploys the Discord interaction API, Lambda function, and application secrets. */
 export class CyberSageControlStack extends Stack {
+  /**
+   * Creates the control-plane resources for Discord interactions.
+   *
+   * @param scope - Parent construct scope.
+   * @param id - Construct identifier.
+   * @param props - Stack configuration and shared data table.
+   */
   constructor(scope: Construct, id: string, props: Props) {
     super(scope, id, props);
 

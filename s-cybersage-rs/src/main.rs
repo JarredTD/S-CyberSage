@@ -1,13 +1,18 @@
-#![deny(missing_docs)]
+#![deny(missing_docs, clippy::missing_docs_in_private_items)]
 //! HTTP entry point for the S-CyberSage Discord interaction handler.
 
 use lambda_http::{run, service_fn, Error};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
+/// Builds the shared dependencies used by request handling.
 mod app_context;
+/// Contains the interaction routing and authorization use cases.
 mod application;
+/// Receives and validates HTTP interactions from Discord.
 mod http_handler;
+/// Provides DynamoDB and Secrets Manager adapters.
 mod infrastructure;
+/// Defines inbound and outbound protocol representations.
 mod transport;
 
 #[tokio::main]

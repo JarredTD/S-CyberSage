@@ -8,6 +8,13 @@ import { Table, AttributeType, BillingMode, ProjectionType } from 'aws-cdk-lib/a
 export class CyberSageDataStack extends Stack {
   public readonly mainTable: Table;
 
+  /**
+   * Creates the persistent resources for Discord role registrations.
+   *
+   * @param scope - Parent construct scope.
+   * @param id - Construct identifier.
+   * @param props - Optional stack configuration.
+   */
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 

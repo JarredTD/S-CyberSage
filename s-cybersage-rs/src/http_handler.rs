@@ -11,11 +11,15 @@ use crate::{
     },
 };
 
+/// Lazily initialized services reused by warm Lambda invocations.
 static APP_CONTEXT: OnceCell<AppContext> = OnceCell::const_new();
 
+/// Name of Discord's Ed25519 signature header.
 const SIG_HEADER: &str = "x-signature-ed25519";
+/// Name of Discord's request timestamp header.
 const TS_HEADER: &str = "x-signature-timestamp";
 
+/// Validates and handles a Discord HTTP interaction request.
 #[tracing::instrument(skip(event, dynamo_client, secrets_client, http_client))]
 pub(crate) async fn function_handler(
     event: Request,
@@ -93,6 +97,7 @@ pub(crate) async fn function_handler(
     Ok(json_response(200, &response))
 }
 
+/// Serializes a value into a JSON HTTP response with the supplied status code.
 fn json_response<T: serde::Serialize>(status: u16, body: &T) -> Response<Body> {
     let body_str = serde_json::to_string(body).unwrap_or_else(|_| "{}".to_string());
 
@@ -103,6 +108,7 @@ fn json_response<T: serde::Serialize>(status: u16, body: &T) -> Response<Body> {
         .unwrap()
 }
 
+/// Extracts the API Gateway request ID for structured logging.
 fn extract_request_id(event: &Request) -> String {
     match event.request_context() {
         lambda_http::request::RequestContext::ApiGatewayV2(ctx) => ctx.request_id.clone(),
