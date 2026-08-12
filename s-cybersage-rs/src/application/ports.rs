@@ -54,6 +54,13 @@ pub trait GuildRoleRepository {
 /// Reads and changes Discord guild member role membership.
 #[allow(async_fn_in_trait)]
 pub trait MemberRoleGateway {
+    /// Returns whether the bot can assign and remove `role_id` in `guild_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when Discord cannot retrieve the bot's guild membership or role hierarchy.
+    async fn can_manage_role(&self, guild_id: &str, role_id: &str) -> Result<bool>;
+
     /// Returns the Discord role IDs currently assigned to a member.
     ///
     /// # Errors

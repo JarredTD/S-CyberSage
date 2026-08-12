@@ -24,6 +24,17 @@ struct GuildMember {
     roles: Vec<String>,
 }
 
+/// Represents the Discord role fields needed to evaluate hierarchy and management restrictions.
+#[derive(Debug, Deserialize)]
+struct GuildRole {
+    /// Stable Discord role identifier.
+    id: String,
+    /// Hierarchy position within the guild.
+    position: i64,
+    /// Whether Discord, rather than the guild, manages the role.
+    managed: bool,
+}
+
 /// Implements Discord's REST API for guild member role operations.
 pub struct RoleManager {
     /// Reusable HTTP client for Discord API requests.
@@ -66,6 +77,66 @@ impl RoleManager {
         let mut manager = Self::new(client, bot_token);
         manager.api_base_url = api_base_url.into().trim_end_matches('/').to_string();
         manager
+    }
+
+    /// Determines whether the bot can manage a role according to Discord's role hierarchy.
+    ///
+    /// # Arguments
+    ///
+    /// * `guild_id` - Guild containing the bot and candidate role.
+    /// * `role_id` - Candidate role to validate.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when Discord rejects the role or bot-membership lookups.
+    pub async fn can_manage_role(&self, guild_id: &str, role_id: &str) -> Result<bool> {
+        if role_id == guild_id {
+            return Ok(false);
+        }
+
+        let roles: Vec<GuildRole> = self
+            .client
+            .get(format!("{}/guilds/{guild_id}/roles", self.api_base_url))
+            .header("Authorization", &self.auth_header)
+            .send()
+            .await
+            .context("Failed to fetch Discord guild roles")?
+            .error_for_status()
+            .context("Discord rejected guild role lookup")?
+            .json()
+            .await
+            .context("Failed to deserialize Discord guild roles")?;
+        let Some(candidate_role) = roles.iter().find(|role| role.id == role_id) else {
+            return Ok(false);
+        };
+
+        if candidate_role.managed {
+            return Ok(false);
+        }
+
+        let bot_member: GuildMember = self
+            .client
+            .get(format!(
+                "{}/users/@me/guilds/{guild_id}/member",
+                self.api_base_url
+            ))
+            .header("Authorization", &self.auth_header)
+            .send()
+            .await
+            .context("Failed to fetch Discord bot guild membership")?
+            .error_for_status()
+            .context("Discord rejected bot guild membership lookup")?
+            .json()
+            .await
+            .context("Failed to deserialize Discord bot guild membership")?;
+        let highest_bot_position = roles
+            .iter()
+            .filter(|role| bot_member.roles.iter().any(|id| id == &role.id))
+            .map(|role| role.position)
+            .max()
+            .unwrap_or_default();
+
+        Ok(candidate_role.position < highest_bot_position)
     }
 
     /// Retrieves the role IDs assigned to a guild member.
@@ -210,6 +281,10 @@ impl RoleManager {
 }
 
 impl MemberRoleGateway for RoleManager {
+    async fn can_manage_role(&self, guild_id: &str, role_id: &str) -> Result<bool> {
+        RoleManager::can_manage_role(self, guild_id, role_id).await
+    }
+
     async fn fetch_member_roles(&self, guild_id: &str, user_id: &str) -> Result<Vec<String>> {
         RoleManager::fetch_member_roles(self, guild_id, user_id).await
     }
@@ -277,5 +352,32 @@ mod tests {
             .modify_user_role("guild", "user", "role", RoleAction::Add)
             .await
             .expect("mocked Discord role addition should succeed");
+    }
+
+    /// Confirms that roles above the bot's highest role are rejected before registration.
+    #[tokio::test]
+    async fn rejects_role_above_bot_hierarchy() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/guilds/guild/roles"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                { "id": "bot-role", "position": 10, "managed": false },
+                { "id": "candidate", "position": 11, "managed": false }
+            ])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/users/@me/guilds/guild/member"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "roles": ["bot-role"]
+            })))
+            .mount(&server)
+            .await;
+        let manager = RoleManager::with_api_base_url(reqwest::Client::new(), "token", server.uri());
+
+        assert!(!manager
+            .can_manage_role("guild", "candidate")
+            .await
+            .expect("mocked Discord hierarchy lookup should succeed"));
     }
 }

@@ -159,6 +159,16 @@ where
             .map(|r| r.name.clone())
             .ok_or_else(|| anyhow!("Resolved role missing"))?;
 
+        if !self
+            .member_role_gateway
+            .can_manage_role(guild_id, role_id)
+            .await?
+        {
+            return Ok(InteractionResponse::ephemeral(
+                "I can't manage this role. Move my bot role above it and try again.",
+            ));
+        }
+
         self.guild_repository
             .save_role(
                 guild_id,
@@ -326,9 +336,15 @@ mod tests {
         member_roles: Vec<String>,
         /// Membership changes requested by the command handler.
         changes: std::sync::Mutex<Vec<(String, String, String, RoleMembershipAction)>>,
+        /// Whether the fake bot can manage a requested role.
+        can_manage_roles: bool,
     }
 
     impl MemberRoleGateway for Arc<FakeMemberRoleGateway> {
+        async fn can_manage_role(&self, _guild_id: &str, _role_id: &str) -> Result<bool> {
+            Ok(self.can_manage_roles)
+        }
+
         async fn fetch_member_roles(&self, _guild_id: &str, _user_id: &str) -> Result<Vec<String>> {
             Ok(self.member_roles.clone())
         }
@@ -381,7 +397,10 @@ mod tests {
         let repository = Arc::new(FakeRoleRepository::default());
         let router = CommandRouter::new(
             repository.clone(),
-            Arc::new(FakeMemberRoleGateway::default()),
+            Arc::new(FakeMemberRoleGateway {
+                can_manage_roles: true,
+                ..Default::default()
+            }),
         );
 
         let response = router
@@ -406,7 +425,10 @@ mod tests {
         let repository = Arc::new(FakeRoleRepository::default());
         let router = CommandRouter::new(
             repository.clone(),
-            Arc::new(FakeMemberRoleGateway::default()),
+            Arc::new(FakeMemberRoleGateway {
+                can_manage_roles: true,
+                ..Default::default()
+            }),
         );
 
         let response = router
@@ -426,6 +448,31 @@ mod tests {
                 .as_slice(),
             [("guild".to_string(), role_registration())]
         );
+    }
+
+    /// Confirms that a role the bot cannot manage is not persisted.
+    #[tokio::test]
+    async fn rejects_role_the_bot_cannot_manage() {
+        let repository = Arc::new(FakeRoleRepository::default());
+        let router = CommandRouter::new(
+            repository.clone(),
+            Arc::new(FakeMemberRoleGateway::default()),
+        );
+
+        let response = router
+            .handle_command(&save_interaction(Some("8")))
+            .await
+            .expect("unmanageable role should produce a response");
+
+        assert_eq!(
+            response.data.and_then(|data| data.content).as_deref(),
+            Some("I can't manage this role. Move my bot role above it and try again.")
+        );
+        assert!(repository
+            .saved_roles
+            .lock()
+            .expect("fake repository lock should not be poisoned")
+            .is_empty());
     }
 
     /// Confirms that toggling an absent role delegates an add operation to Discord.

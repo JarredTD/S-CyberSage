@@ -105,6 +105,10 @@ mod tests {
     struct NoopMemberRoleGateway;
 
     impl MemberRoleGateway for NoopMemberRoleGateway {
+        async fn can_manage_role(&self, _guild_id: &str, _role_id: &str) -> Result<bool> {
+            Ok(true)
+        }
+
         async fn fetch_member_roles(&self, _guild_id: &str, _user_id: &str) -> Result<Vec<String>> {
             Ok(vec![])
         }
