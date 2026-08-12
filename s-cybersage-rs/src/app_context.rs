@@ -24,6 +24,17 @@ pub struct AppContext {
 
 impl AppContext {
     /// Initializes application services from AWS clients and Lambda configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `dynamo` - Client used to persist self-assignable role registrations.
+    /// * `secrets` - Client used to retrieve Discord credentials.
+    /// * `http` - Reusable client for Discord API requests.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when required environment variables are absent or Discord credentials
+    /// cannot be retrieved from Secrets Manager.
     pub async fn new(
         dynamo: DynamoClient,
         secrets: SecretsClient,

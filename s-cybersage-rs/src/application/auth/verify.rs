@@ -18,6 +18,18 @@ impl AuthManager {
     }
 
     /// Verifies the request timestamp and Ed25519 signature against the raw body.
+    ///
+    /// # Arguments
+    ///
+    /// * `signature_hex` - Value of Discord's Ed25519 signature header.
+    /// * `timestamp` - Value of Discord's request timestamp header.
+    /// * `body` - Exact raw request body received from Discord.
+    /// * `public_key_hex` - Discord application public key encoded as hexadecimal.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when headers are missing, the timestamp is outside the accepted window,
+    /// key material is malformed, or the signature does not match the request body.
     pub fn verify_signature(
         &self,
         signature_hex: &str,

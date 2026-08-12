@@ -32,6 +32,11 @@ pub struct RoleManager {
 
 impl RoleManager {
     /// Creates a role manager authenticated with the supplied Discord bot token.
+    ///
+    /// # Arguments
+    ///
+    /// * `client` - Reusable HTTP client for Discord REST API calls.
+    /// * `bot_token` - Discord bot token used to authenticate those calls.
     pub fn new(client: Client, bot_token: impl Into<String>) -> Self {
         let token = bot_token.into();
 
@@ -42,6 +47,16 @@ impl RoleManager {
     }
 
     /// Retrieves the role IDs assigned to a guild member.
+    ///
+    /// # Arguments
+    ///
+    /// * `guild_id` - Discord guild containing the member.
+    /// * `user_id` - Discord user whose membership is queried.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the member does not exist, the bot lacks permission, or Discord's
+    /// REST API request or response fails.
     pub async fn fetch_member_roles(&self, guild_id: &str, user_id: &str) -> Result<Vec<String>> {
         let url = format!(
             "{}/guilds/{}/members/{}",
@@ -75,6 +90,18 @@ impl RoleManager {
     }
 
     /// Adds or removes a role from a guild member.
+    ///
+    /// # Arguments
+    ///
+    /// * `guild_id` - Discord guild containing the member and role.
+    /// * `user_id` - Discord user whose role membership changes.
+    /// * `role_id` - Discord role to add or remove.
+    /// * `action` - Whether the role is added or removed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when Discord rejects the change, including missing permissions,
+    /// missing resources, or rate limiting.
     pub async fn modify_user_role(
         &self,
         guild_id: &str,

@@ -10,11 +10,25 @@ pub struct SecretsReader {
 
 impl SecretsReader {
     /// Creates a secrets reader backed by the supplied AWS client.
+    ///
+    /// # Arguments
+    ///
+    /// * `client` - Secrets Manager client used for subsequent lookups.
     pub fn new(client: Client) -> Self {
         Self { client }
     }
 
     /// Retrieves a string field from a JSON-encoded secret.
+    ///
+    /// # Arguments
+    ///
+    /// * `secret_id` - ARN or name of the secret to retrieve.
+    /// * `key` - JSON field expected to contain the string value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when Secrets Manager rejects the request, the secret is not a JSON string,
+    /// or `key` is absent or not a string.
     pub async fn get_string(&self, secret_id: &str, key: &str) -> Result<String> {
         let response = self
             .client

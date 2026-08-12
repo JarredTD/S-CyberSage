@@ -1,4 +1,8 @@
-#![deny(missing_docs, clippy::missing_docs_in_private_items)]
+#![deny(
+    missing_docs,
+    clippy::missing_docs_in_private_items,
+    clippy::missing_errors_doc
+)]
 //! HTTP entry point for the S-CyberSage Discord interaction handler.
 
 use lambda_http::{run, service_fn, Error};
@@ -15,6 +19,11 @@ mod infrastructure;
 /// Defines inbound and outbound protocol representations.
 mod transport;
 
+/// Initializes shared AWS and HTTP clients, then starts the Lambda runtime.
+///
+/// # Errors
+///
+/// Returns an error when logging, HTTP client construction, or Lambda runtime startup fails.
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     tracing_subscriber::registry()

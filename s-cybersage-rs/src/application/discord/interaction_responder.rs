@@ -15,11 +15,24 @@ pub struct InteractionResponder {
 
 impl InteractionResponder {
     /// Creates an interaction responder with the supplied HTTP client.
+    ///
+    /// # Arguments
+    ///
+    /// * `client` - Reusable HTTP client for Discord interaction webhook calls.
     pub fn new(client: reqwest::Client) -> Self {
         Self { client }
     }
 
     /// Acknowledges a command before Discord's three-second interaction deadline.
+    ///
+    /// # Arguments
+    ///
+    /// * `interaction` - Signed Discord command interaction containing an ID and response token.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the interaction lacks callback identifiers or Discord rejects the
+    /// deferred acknowledgement.
     pub async fn defer_ephemeral(&self, interaction: &InteractionRequest) -> Result<()> {
         let interaction_id = require_interaction_id(interaction)?;
         let token = require_interaction_token(interaction)?;
@@ -38,6 +51,16 @@ impl InteractionResponder {
     }
 
     /// Replaces the deferred interaction message with the completed command result.
+    ///
+    /// # Arguments
+    ///
+    /// * `interaction` - Original Discord interaction containing webhook identifiers.
+    /// * `response` - Completed message response used to replace the deferred message.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the interaction is incomplete, the response has no message data, or
+    /// Discord rejects the webhook update.
     pub async fn update_original_response(
         &self,
         interaction: &InteractionRequest,

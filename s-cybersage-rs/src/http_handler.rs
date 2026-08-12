@@ -21,6 +21,18 @@ const SIG_HEADER: &str = "x-signature-ed25519";
 const TS_HEADER: &str = "x-signature-timestamp";
 
 /// Validates and handles a Discord HTTP interaction request.
+///
+/// # Arguments
+///
+/// * `event` - API Gateway request received from Discord.
+/// * `dynamo_client` - DynamoDB client used by command handlers.
+/// * `secrets_client` - Secrets Manager client used during lazy initialization.
+/// * `http_client` - Reusable HTTP client for Discord API calls.
+///
+/// # Errors
+///
+/// Returns an error when application initialization fails or Discord cannot accept or update a
+/// deferred command response. Invalid user requests are returned as HTTP error responses instead.
 #[tracing::instrument(skip(event, dynamo_client, secrets_client, http_client))]
 pub(crate) async fn function_handler(
     event: Request,

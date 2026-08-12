@@ -15,11 +15,24 @@ pub struct InteractionRouter {
 
 impl InteractionRouter {
     /// Creates an interaction router backed by a command router.
+    ///
+    /// # Arguments
+    ///
+    /// * `command_router` - Handler used for application commands and autocomplete requests.
     pub fn new(command_router: CommandRouter) -> Self {
         Self { command_router }
     }
 
     /// Routes a Discord interaction according to its interaction type.
+    ///
+    /// # Arguments
+    ///
+    /// * `interaction` - Verified Discord interaction to process.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the delegated command handler cannot read or update its backing
+    /// services.
     #[tracing::instrument(skip(self, interaction))]
     pub async fn route(&self, interaction: &InteractionRequest) -> Result<InteractionResponse> {
         match interaction.interaction_type {

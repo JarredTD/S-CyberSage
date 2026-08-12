@@ -22,6 +22,11 @@ pub struct CommandRouter {
 
 impl CommandRouter {
     /// Creates a command router from its persistence and Discord dependencies.
+    ///
+    /// # Arguments
+    ///
+    /// * `guild_dao` - Persistence adapter for registered self-assignable roles.
+    /// * `role_manager` - Discord adapter that changes member role assignments.
     pub fn new(guild_dao: GuildDao, role_manager: RoleManager) -> Self {
         Self {
             guild_dao,
@@ -30,6 +35,14 @@ impl CommandRouter {
     }
 
     /// Returns matching self-assignable roles for a Discord autocomplete interaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `interaction` - Verified autocomplete interaction with a guild and focused option.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the interaction lacks a guild ID or DynamoDB cannot retrieve roles.
     pub async fn handle_autocomplete(
         &self,
         interaction: &InteractionRequest,
@@ -59,6 +72,15 @@ impl CommandRouter {
     }
 
     /// Handles a Discord application command interaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `interaction` - Verified command interaction to dispatch.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when required command fields are missing or a persistence or Discord API
+    /// operation fails.
     #[tracing::instrument(skip(self, interaction))]
     pub async fn handle_command(
         &self,

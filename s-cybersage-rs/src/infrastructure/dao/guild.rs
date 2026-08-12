@@ -46,6 +46,11 @@ pub struct GuildDao {
 
 impl GuildDao {
     /// Creates a DAO bound to the supplied DynamoDB table.
+    ///
+    /// # Arguments
+    ///
+    /// * `client` - DynamoDB client used for subsequent table operations.
+    /// * `table_name` - Name of the table that stores role registrations.
     pub fn new(client: Client, table_name: impl Into<String>) -> Self {
         Self {
             client,
@@ -54,6 +59,15 @@ impl GuildDao {
     }
 
     /// Returns up to 25 saved roles whose names begin with the supplied prefix.
+    ///
+    /// # Arguments
+    ///
+    /// * `guild_id` - Discord guild whose registrations are queried.
+    /// * `prefix` - Case-insensitive role-name prefix; blank prefixes return no roles.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when DynamoDB rejects the lookup.
     pub async fn query_roles_by_prefix(
         &self,
         guild_id: &str,
@@ -99,6 +113,16 @@ impl GuildDao {
     }
 
     /// Saves or replaces a guild's self-assignable role registration.
+    ///
+    /// # Arguments
+    ///
+    /// * `guild_id` - Discord guild that owns the registration.
+    /// * `role_id` - Stable Discord role identifier to persist.
+    /// * `role_name` - Human-readable role name used by autocomplete and lookup.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when DynamoDB rejects the write.
     pub async fn save_role(&self, guild_id: &str, role_id: &str, role_name: &str) -> Result<()> {
         let normalized = role_name.to_lowercase();
 
@@ -135,6 +159,19 @@ impl GuildDao {
     }
 
     /// Finds a guild's self-assignable role by a case-insensitive name.
+    ///
+    /// # Arguments
+    ///
+    /// * `guild_id` - Discord guild whose registrations are queried.
+    /// * `role_name` - Case-insensitive name of the role to find.
+    ///
+    /// # Returns
+    ///
+    /// Returns the display name and Discord role ID when a registration exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when DynamoDB rejects the lookup.
     pub async fn get_role_by_name(
         &self,
         guild_id: &str,

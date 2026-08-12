@@ -68,6 +68,10 @@ impl InteractionResponse {
     }
 
     /// Builds an ephemeral message response visible only to the invoking user.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - Message text displayed to the user.
     pub fn ephemeral(content: impl Into<String>) -> Self {
         Self {
             kind: InteractionCallbackType::ChannelMessageWithSource,
@@ -92,6 +96,10 @@ impl InteractionResponse {
     }
 
     /// Builds an autocomplete response containing the supplied choices.
+    ///
+    /// # Arguments
+    ///
+    /// * `choices` - Values Discord presents for the focused command option.
     pub fn autocomplete(choices: Vec<ApplicationCommandOptionChoice>) -> Self {
         Self {
             kind: InteractionCallbackType::ApplicationCommandAutocompleteResult,
