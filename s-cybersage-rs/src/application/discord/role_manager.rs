@@ -3,6 +3,8 @@ use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use tracing::{error, info, warn};
 
+use crate::application::ports::{MemberRoleGateway, RoleMembershipAction};
+
 /// Base URL for Discord's version 10 REST API.
 const DISCORD_API_BASE: &str = "https://discord.com/api/v10";
 
@@ -184,5 +186,26 @@ impl RoleManager {
                 bail!("Discord API error: {}", other);
             }
         }
+    }
+}
+
+impl MemberRoleGateway for RoleManager {
+    async fn fetch_member_roles(&self, guild_id: &str, user_id: &str) -> Result<Vec<String>> {
+        RoleManager::fetch_member_roles(self, guild_id, user_id).await
+    }
+
+    async fn modify_user_role(
+        &self,
+        guild_id: &str,
+        user_id: &str,
+        role_id: &str,
+        action: RoleMembershipAction,
+    ) -> Result<()> {
+        let action = match action {
+            RoleMembershipAction::Add => RoleAction::Add,
+            RoleMembershipAction::Remove => RoleAction::Remove,
+        };
+
+        RoleManager::modify_user_role(self, guild_id, user_id, role_id, action).await
     }
 }

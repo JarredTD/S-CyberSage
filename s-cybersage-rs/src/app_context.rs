@@ -15,7 +15,7 @@ pub struct AppContext {
     /// Verifies signatures on incoming Discord interactions.
     pub auth_manager: AuthManager,
     /// Routes verified interactions to application handlers.
-    pub interaction_router: InteractionRouter,
+    pub interaction_router: InteractionRouter<GuildDao, RoleManager>,
     /// Sends lifecycle responses for commands that exceed Discord's inline deadline.
     pub interaction_responder: InteractionResponder,
     /// Hex-encoded Discord application public key used for verification.

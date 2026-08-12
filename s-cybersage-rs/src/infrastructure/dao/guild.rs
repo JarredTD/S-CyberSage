@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use aws_sdk_dynamodb::{types::AttributeValue, Client};
 
+use crate::application::ports::{GuildRoleRepository, RoleRegistration};
+
 /// Builds the primary and secondary index keys for guild role registrations.
 struct Keys;
 
@@ -206,5 +208,36 @@ impl GuildDao {
                 let id = item.get("role_id")?.as_s().ok()?.to_string();
                 Some((name, id))
             }))
+    }
+}
+
+impl GuildRoleRepository for GuildDao {
+    async fn query_roles_by_prefix(
+        &self,
+        guild_id: &str,
+        prefix: &str,
+    ) -> Result<Vec<RoleRegistration>> {
+        self.query_roles_by_prefix(guild_id, prefix)
+            .await
+            .map(|roles| {
+                roles
+                    .into_iter()
+                    .map(|(name, id)| RoleRegistration { name, id })
+                    .collect()
+            })
+    }
+
+    async fn save_role(&self, guild_id: &str, role: &RoleRegistration) -> Result<()> {
+        self.save_role(guild_id, &role.id, &role.name).await
+    }
+
+    async fn get_role_by_name(
+        &self,
+        guild_id: &str,
+        role_name: &str,
+    ) -> Result<Option<RoleRegistration>> {
+        self.get_role_by_name(guild_id, role_name)
+            .await
+            .map(|role| role.map(|(name, id)| RoleRegistration { name, id }))
     }
 }
