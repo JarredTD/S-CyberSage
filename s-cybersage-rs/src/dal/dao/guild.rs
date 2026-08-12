@@ -42,37 +42,6 @@ impl GuildDao {
         }
     }
 
-    pub async fn get_role_by_id(
-        &self,
-        guild_id: &str,
-        role_id: &str,
-    ) -> Result<Option<(String, String)>> {
-        let response = self
-            .client
-            .query()
-            .table_name(&self.table_name)
-            .index_name("LookupByRoleId")
-            .key_condition_expression("role_id_lookup_pk = :pk AND role_id_lookup_sk = :sk")
-            .expression_attribute_values(
-                ":pk",
-                AttributeValue::S(Keys::role_id_lookup_pk(guild_id)),
-            )
-            .expression_attribute_values(":sk", AttributeValue::S(Keys::role_id_lookup_sk(role_id)))
-            .limit(1)
-            .send()
-            .await
-            .context("Failed to get role by ID")?;
-
-        Ok(response
-            .items
-            .and_then(|mut items| items.pop())
-            .and_then(|item| {
-                let name = item.get("role_name")?.as_s().ok()?.to_string();
-                let id = item.get("role_id")?.as_s().ok()?.to_string();
-                Some((name, id))
-            }))
-    }
-
     pub async fn query_roles_by_prefix(
         &self,
         guild_id: &str,

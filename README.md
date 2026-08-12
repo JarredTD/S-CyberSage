@@ -23,9 +23,9 @@ DISCORD_TOKEN=
 DISCORD_CLIENT_ID=
 DISCORD_GUILD_ID=
 
-- **DISCORD_TOKEN** — Bot token  
-- **DISCORD_CLIENT_ID** — Application (client) ID  
-- **DISCORD_GUILD_ID** — Target guild for registering commands  
+- **DISCORD_TOKEN** — Bot token
+- **DISCORD_CLIENT_ID** — Application (client) ID
+- **DISCORD_GUILD_ID** — Target guild for registering commands
 
 ### 2. Secrets (AWS)
 
@@ -49,8 +49,8 @@ You must register slash commands before use.
 
 ## Permissions
 
-- `Manage Roles` — Required for the bot to add/remove roles from users  
-- The bot’s highest role **must be above** any roles it is trying to assign/remove  
+- `Manage Roles` — Required for the bot to add/remove roles from users
+- The bot’s highest role **must be above** any roles it is trying to assign/remove
 
 ## License
 

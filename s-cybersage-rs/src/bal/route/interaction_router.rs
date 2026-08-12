@@ -15,7 +15,7 @@ impl InteractionRouter {
     pub fn new(command_router: CommandRouter) -> Self {
         Self { command_router }
     }
-    
+
     #[tracing::instrument(skip(self, interaction))]
     pub async fn route(&self, interaction: &InteractionRequest) -> Result<InteractionResponse> {
         match interaction.interaction_type {

@@ -16,11 +16,6 @@ pub enum InteractionType {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct InteractionRequest {
-    pub id: String,
-
-    #[serde(rename = "application_id")]
-    pub application_id: String,
-
     #[serde(rename = "type")]
     pub interaction_type: InteractionType,
 
@@ -36,7 +31,6 @@ pub struct InteractionRequest {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ApplicationCommandData {
-    pub id: String,
     pub name: String,
 
     #[serde(default)]
@@ -57,18 +51,9 @@ pub struct CommandOption {
     pub options: Vec<CommandOption>,
 }
 
-impl CommandOption {
-    pub fn value_as_str(&self) -> Option<&str> {
-        self.value.as_ref()?.as_str()
-    }
-}
-
 #[derive(Debug, Deserialize, Clone)]
 pub struct Member {
     pub user: User,
-
-    #[serde(default)]
-    pub roles: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -84,6 +69,5 @@ pub struct ResolvedData {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ResolvedRole {
-    pub id: String,
     pub name: String,
 }

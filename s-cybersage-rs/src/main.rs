@@ -1,10 +1,13 @@
+#![deny(missing_docs)]
+//! HTTP entry point for the S-CyberSage Discord interaction handler.
+
 use lambda_http::{run, service_fn, Error};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-pub mod app_context;
-pub mod bal;
-pub mod dal;
-pub mod http_handler;
+mod app_context;
+mod bal;
+mod dal;
+mod http_handler;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {

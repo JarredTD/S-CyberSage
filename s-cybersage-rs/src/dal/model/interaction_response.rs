@@ -50,17 +50,6 @@ impl InteractionResponse {
         }
     }
 
-    pub fn message(content: impl Into<String>) -> Self {
-        Self {
-            kind: InteractionCallbackType::ChannelMessageWithSource,
-            data: Some(InteractionCallbackData {
-                content: Some(content.into()),
-                flags: None,
-                choices: None,
-            }),
-        }
-    }
-
     pub fn ephemeral(content: impl Into<String>) -> Self {
         Self {
             kind: InteractionCallbackType::ChannelMessageWithSource,
