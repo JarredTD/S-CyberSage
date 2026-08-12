@@ -165,7 +165,7 @@ where
             .await?
         {
             return Ok(InteractionResponse::ephemeral(
-                "I can't manage this role. Move my bot role above it and try again.",
+                "I need Manage Roles permission and a bot role above this role before I can register it.",
             ));
         }
 
@@ -466,7 +466,7 @@ mod tests {
 
         assert_eq!(
             response.data.and_then(|data| data.content).as_deref(),
-            Some("I can't manage this role. Move my bot role above it and try again.")
+            Some("I need Manage Roles permission and a bot role above this role before I can register it.")
         );
         assert!(repository
             .saved_roles

@@ -7,6 +7,8 @@ use crate::application::ports::{MemberRoleGateway, RoleMembershipAction};
 
 /// Base URL for Discord's version 10 REST API.
 const DISCORD_API_BASE: &str = "https://discord.com/api/v10";
+/// Bit position Discord assigns to the Manage Roles guild permission.
+const MANAGE_ROLES_PERMISSION: u64 = 1 << 28;
 
 /// Describes the role membership change to apply to a guild member.
 #[derive(Debug, Clone, Copy)]
@@ -33,6 +35,8 @@ struct GuildRole {
     position: i64,
     /// Whether Discord, rather than the guild, manages the role.
     managed: bool,
+    /// Guild permissions granted by this role as a decimal bitfield string.
+    permissions: String,
 }
 
 /// Implements Discord's REST API for guild member role operations.
@@ -129,14 +133,21 @@ impl RoleManager {
             .json()
             .await
             .context("Failed to deserialize Discord bot guild membership")?;
-        let highest_bot_position = roles
+        let bot_roles: Vec<&GuildRole> = roles
             .iter()
             .filter(|role| bot_member.roles.iter().any(|id| id == &role.id))
+            .collect();
+        let highest_bot_position = bot_roles
+            .iter()
             .map(|role| role.position)
             .max()
             .unwrap_or_default();
+        let bot_permissions = bot_roles.iter().fold(0_u64, |permissions, role| {
+            permissions | role.permissions.parse::<u64>().unwrap_or_default()
+        });
 
-        Ok(candidate_role.position < highest_bot_position)
+        Ok(bot_permissions & MANAGE_ROLES_PERMISSION != 0
+            && candidate_role.position < highest_bot_position)
     }
 
     /// Retrieves the role IDs assigned to a guild member.
@@ -361,8 +372,8 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/guilds/guild/roles"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
-                { "id": "bot-role", "position": 10, "managed": false },
-                { "id": "candidate", "position": 11, "managed": false }
+                { "id": "bot-role", "position": 10, "managed": false, "permissions": "268435456" },
+                { "id": "candidate", "position": 11, "managed": false, "permissions": "0" }
             ])))
             .mount(&server)
             .await;
@@ -379,5 +390,32 @@ mod tests {
             .can_manage_role("guild", "candidate")
             .await
             .expect("mocked Discord hierarchy lookup should succeed"));
+    }
+
+    /// Confirms that a bot without Manage Roles cannot register an otherwise lower role.
+    #[tokio::test]
+    async fn rejects_role_when_bot_lacks_manage_roles_permission() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/guilds/guild/roles"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                { "id": "bot-role", "position": 10, "managed": false, "permissions": "0" },
+                { "id": "candidate", "position": 5, "managed": false, "permissions": "0" }
+            ])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/users/@me/guilds/guild/member"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "roles": ["bot-role"]
+            })))
+            .mount(&server)
+            .await;
+        let manager = RoleManager::with_api_base_url(reqwest::Client::new(), "token", server.uri());
+
+        assert!(!manager
+            .can_manage_role("guild", "candidate")
+            .await
+            .expect("mocked Discord permission lookup should succeed"));
     }
 }
