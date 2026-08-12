@@ -56,3 +56,110 @@ where
         }
     }
 }
+
+/// Tests interaction dispatch without infrastructure adapters.
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+
+    use super::InteractionRouter;
+    use crate::{
+        application::{
+            ports::{
+                GuildRoleRepository, MemberRoleGateway, RoleMembershipAction, RoleRegistration,
+            },
+            route::command_router::CommandRouter,
+        },
+        transport::discord::{
+            interaction_request::{InteractionRequest, InteractionType},
+            interaction_response::InteractionCallbackType,
+        },
+    };
+
+    /// Provides an inert role repository for routes that do not access storage.
+    struct NoopRepository;
+
+    impl GuildRoleRepository for NoopRepository {
+        async fn query_roles_by_prefix(
+            &self,
+            _guild_id: &str,
+            _prefix: &str,
+        ) -> Result<Vec<RoleRegistration>> {
+            Ok(vec![])
+        }
+
+        async fn save_role(&self, _guild_id: &str, _role: &RoleRegistration) -> Result<()> {
+            Ok(())
+        }
+
+        async fn get_role_by_name(
+            &self,
+            _guild_id: &str,
+            _role_name: &str,
+        ) -> Result<Option<RoleRegistration>> {
+            Ok(None)
+        }
+    }
+
+    /// Provides an inert Discord gateway for routes that do not call Discord.
+    struct NoopMemberRoleGateway;
+
+    impl MemberRoleGateway for NoopMemberRoleGateway {
+        async fn fetch_member_roles(&self, _guild_id: &str, _user_id: &str) -> Result<Vec<String>> {
+            Ok(vec![])
+        }
+
+        async fn modify_user_role(
+            &self,
+            _guild_id: &str,
+            _user_id: &str,
+            _role_id: &str,
+            _action: RoleMembershipAction,
+        ) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Confirms that Discord verification pings receive a synchronous pong response.
+    #[tokio::test]
+    async fn responds_to_ping() {
+        let response = router()
+            .route(&interaction(InteractionType::Ping))
+            .await
+            .expect("ping should not fail");
+
+        assert!(matches!(response.kind, InteractionCallbackType::Pong));
+    }
+
+    /// Confirms that unsupported interactions receive an ephemeral response.
+    #[tokio::test]
+    async fn rejects_unknown_interaction() {
+        let response = router()
+            .route(&interaction(InteractionType::Unknown))
+            .await
+            .expect("unsupported interaction should produce a response");
+
+        assert_eq!(
+            response.data.and_then(|data| data.content).as_deref(),
+            Some("Unsupported interaction type.")
+        );
+    }
+
+    /// Builds the router with inert dependencies for pure dispatch tests.
+    fn router() -> InteractionRouter<NoopRepository, NoopMemberRoleGateway> {
+        InteractionRouter::new(CommandRouter::new(NoopRepository, NoopMemberRoleGateway))
+    }
+
+    /// Builds the minimal interaction required to test its type-based routing.
+    fn interaction(interaction_type: InteractionType) -> InteractionRequest {
+        InteractionRequest {
+            id: None,
+            application_id: None,
+            token: None,
+            interaction_type,
+            data: None,
+            guild_id: None,
+            member: None,
+        }
+    }
+}
