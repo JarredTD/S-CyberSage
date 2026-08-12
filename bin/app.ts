@@ -26,6 +26,6 @@ new CyberSageControlStack(app, 'S-CyberSageControlStack', {
   mainTable: dataStack.mainTable,
 });
 
-Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
+Aspects.of(app).add(new AwsSolutionsChecks());
 
 app.synth();

@@ -21,8 +21,7 @@ jobs:
 
       - uses: moonrepo/setup-rust@abb2d32350334249b178c401e5ec5836e0cd88d3 # v1
         with:
-          channel: 1.94.1
-          components: clippy,rustfmt
+          inherit-toolchain: true
           bins: cargo-lambda@1.9.1
 
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -30,8 +29,5 @@ jobs:
           version: 0.14.0
 
       - run: npm ci
-      - run: npm run format:check
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm run test
+      - run: npm run check
       - run: npm run infra:validate
