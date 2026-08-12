@@ -8,6 +8,8 @@
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
     "noUnusedLocals": true,

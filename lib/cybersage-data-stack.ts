@@ -1,6 +1,7 @@
 import { Stack, RemovalPolicy, CfnOutput } from 'aws-cdk-lib';
 import type { StackProps } from 'aws-cdk-lib';
 import type { Construct } from 'constructs';
+import { NagSuppressions } from 'cdk-nag';
 import { Table, AttributeType, BillingMode, ProjectionType } from 'aws-cdk-lib/aws-dynamodb';
 
 /** Deploys the persistent storage used by the Discord bot. */
@@ -60,5 +61,13 @@ export class CyberSageDataStack extends Stack {
     new CfnOutput(this, 'TableName', {
       value: this.mainTable.tableName,
     });
+
+    NagSuppressions.addResourceSuppressions(this.mainTable, [
+      {
+        id: 'AwsSolutions-DDB3',
+        reason:
+          'This low-value configuration table can be rebuilt from Discord role registration; point-in-time recovery is intentionally disabled to avoid ongoing backup charges.',
+      },
+    ]);
   }
 }
