@@ -61,6 +61,7 @@ dependencies = [
 [[package]]
 name = "athenaeum"
 version = "0.1.0"
+source = "git+https://github.com/JarredTD/Athenaeum.git?tag=v0.1.0#3c4981abb38f44494d2799e404480a6d5899fb16"
 dependencies = [
  "anyhow",
  "bitflags",
