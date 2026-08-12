@@ -1,5 +1,8 @@
 # S-CyberSage
 
+[![CI](https://github.com/JarredTD/S-CyberSage/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JarredTD/S-CyberSage/actions/workflows/ci.yml)
+[![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
+
 S-CyberSage is a serverless Discord bot for managing self-assignable roles in a single production guild. Administrators register roles, and members add or remove registered roles with slash commands.
 
 The bot runs as an AWS Lambda behind API Gateway, stores role registrations in DynamoDB, and retrieves Discord credentials from Secrets Manager. Athenaeum provides the Discord interaction primitives; CyberSage defines the role commands and policies.
