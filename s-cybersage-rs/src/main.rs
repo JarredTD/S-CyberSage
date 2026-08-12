@@ -8,6 +8,7 @@ mod app_context;
 mod bal;
 mod dal;
 mod http_handler;
+mod transport;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {

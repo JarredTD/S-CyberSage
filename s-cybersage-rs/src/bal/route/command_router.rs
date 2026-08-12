@@ -2,12 +2,10 @@ use anyhow::{anyhow, Result};
 
 use crate::{
     bal::discord::role_manager::{RoleAction, RoleManager},
-    dal::{
-        dao::guild::GuildDao,
-        model::{
-            interaction_request::{ApplicationCommandData, CommandOption, InteractionRequest},
-            interaction_response::{ApplicationCommandOptionChoice, InteractionResponse},
-        },
+    dal::dao::guild::GuildDao,
+    transport::discord::{
+        interaction_request::{ApplicationCommandData, CommandOption, InteractionRequest},
+        interaction_response::{ApplicationCommandOptionChoice, InteractionResponse},
     },
 };
 

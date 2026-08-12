@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::dal::model::{
+use crate::transport::discord::{
     interaction_request::{InteractionRequest, InteractionType},
     interaction_response::InteractionResponse,
 };

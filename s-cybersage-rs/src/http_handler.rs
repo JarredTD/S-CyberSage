@@ -4,7 +4,12 @@ use lambda_http::{Body, Error, Request, RequestExt, Response};
 use serde_json::json;
 use tokio::sync::OnceCell;
 
-use crate::{app_context::AppContext, dal::model::interaction_request::InteractionRequest};
+use crate::{
+    app_context::AppContext,
+    transport::discord::{
+        interaction_request::InteractionRequest, interaction_response::InteractionResponse,
+    },
+};
 
 static APP_CONTEXT: OnceCell<AppContext> = OnceCell::const_new();
 
@@ -81,9 +86,7 @@ pub(crate) async fn function_handler(
         Ok(r) => r,
         Err(e) => {
             tracing::error!(error = %e, "interaction routing failed");
-            crate::dal::model::interaction_response::InteractionResponse::ephemeral(
-                "Internal error.",
-            )
+            InteractionResponse::ephemeral("Internal error.")
         }
     };
 
