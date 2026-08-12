@@ -73,6 +73,7 @@ impl RoleManager {
     /// * `client` - Reusable HTTP client for REST API calls.
     /// * `bot_token` - Token used to authenticate REST API calls.
     /// * `api_base_url` - Base URL of the Discord-compatible REST API.
+    #[cfg(test)]
     pub fn with_api_base_url(
         client: Client,
         bot_token: impl Into<String>,
