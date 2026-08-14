@@ -1,13 +1,10 @@
-use athenaeum::{auth::InteractionVerifier, http::InteractionResponder};
+use athenaeum::{auth::InteractionVerifier, http::InteractionResponder, secrets::JsonSecretReader};
 use aws_sdk_dynamodb::Client as DynamoClient;
 use aws_sdk_secretsmanager::Client as SecretsClient;
 
 use crate::{
     application::route::{command_router::CommandRouter, interaction_router::InteractionRouter},
-    infrastructure::{
-        dao::guild::GuildDao, discord::role_manager::RoleManager,
-        reader::secrets_reader::SecretsReader,
-    },
+    infrastructure::{dao::guild::GuildDao, discord::role_manager::RoleManager},
 };
 
 /// Holds initialized services shared across Lambda invocations.
@@ -44,11 +41,11 @@ impl AppContext {
         let public_key_secret_arn = std::env::var("DISCORD_PUBLIC_KEY_SECRET_ARN")?;
         let token_secret_arn = std::env::var("DISCORD_TOKEN_SECRET_ARN")?;
 
-        let secrets_reader = SecretsReader::new(secrets);
+        let secrets_reader = JsonSecretReader::new(secrets);
 
         let (discord_public_key, discord_token) = tokio::try_join!(
-            secrets_reader.get_string(&public_key_secret_arn, "key"),
-            secrets_reader.get_string(&token_secret_arn, "token")
+            secrets_reader.get_required_string(&public_key_secret_arn, "key"),
+            secrets_reader.get_required_string(&token_secret_arn, "token")
         )?;
 
         let guild_dao = GuildDao::new(dynamo, main_table);

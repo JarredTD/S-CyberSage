@@ -50,7 +50,9 @@ where
             InteractionKind::ApplicationCommand => {
                 self.command_router.handle_command(interaction).await
             }
-            InteractionKind::Unknown => Ok(InteractionResponse::ephemeral(
+            InteractionKind::MessageComponent
+            | InteractionKind::ModalSubmit
+            | InteractionKind::Unknown => Ok(InteractionResponse::ephemeral(
                 "Unsupported interaction type.",
             )),
         }
@@ -159,6 +161,7 @@ mod tests {
             kind,
             data: None,
             guild_id: None,
+            channel_id: None,
             member: None,
         }
     }

@@ -6,7 +6,7 @@ rust-version = "1.94.1"
 
 [dependencies]
 anyhow = "1.0.99"
-athenaeum = { git = "https://github.com/JarredTD/Athenaeum.git", tag = "v0.1.0", features = ["http"] }
+athenaeum = { path = "../../Athenaeum", features = ["http", "aws-secrets"] }
 aws-config = { version = "1.8.6", features = ["behavior-version-latest"] }
 aws-sdk-dynamodb = { version = "1.93.0", features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = { version = "1.88.0", features = ["behavior-version-latest"] }

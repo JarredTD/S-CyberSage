@@ -604,6 +604,7 @@ mod tests {
             kind: InteractionKind::ApplicationCommand,
             data: None,
             guild_id: Some("guild".to_string()),
+            channel_id: None,
             member: Some(Member {
                 permissions: permissions.map(str::to_string),
                 user: User {
