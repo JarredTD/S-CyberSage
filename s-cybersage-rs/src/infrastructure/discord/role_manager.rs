@@ -1,12 +1,11 @@
 use anyhow::{bail, Context, Result};
+use athenaeum::http::DiscordBotClient;
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use tracing::{error, info, warn};
 
 use crate::application::ports::{MemberRoleGateway, RoleMembershipAction};
 
-/// Base URL for Discord's version 10 REST API.
-const DISCORD_API_BASE: &str = "https://discord.com/api/v10";
 /// Bit position Discord assigns to the Manage Roles guild permission.
 const MANAGE_ROLES_PERMISSION: u64 = 1 << 28;
 
@@ -41,12 +40,8 @@ struct GuildRole {
 
 /// Implements Discord's REST API for guild member role operations.
 pub struct RoleManager {
-    /// Reusable HTTP client for Discord API requests.
-    client: Client,
-    /// Preformatted bot authorization header.
-    auth_header: String,
-    /// Base URL for Discord REST API requests.
-    api_base_url: String,
+    /// Bot-authenticated client for Discord API requests.
+    client: DiscordBotClient,
 }
 
 impl RoleManager {
@@ -57,12 +52,8 @@ impl RoleManager {
     /// * `client` - Reusable HTTP client for Discord REST API calls.
     /// * `bot_token` - Discord bot token used to authenticate those calls.
     pub fn new(client: Client, bot_token: impl Into<String>) -> Self {
-        let token = bot_token.into();
-
         Self {
-            client,
-            auth_header: format!("Bot {}", token),
-            api_base_url: DISCORD_API_BASE.to_string(),
+            client: DiscordBotClient::new(client, bot_token),
         }
     }
 
@@ -79,9 +70,9 @@ impl RoleManager {
         bot_token: impl Into<String>,
         api_base_url: impl Into<String>,
     ) -> Self {
-        let mut manager = Self::new(client, bot_token);
-        manager.api_base_url = api_base_url.into().trim_end_matches('/').to_string();
-        manager
+        Self {
+            client: DiscordBotClient::with_api_base_url(client, bot_token, api_base_url),
+        }
     }
 
     /// Determines whether the bot can manage a role according to Discord's role hierarchy.
@@ -101,8 +92,7 @@ impl RoleManager {
 
         let roles: Vec<GuildRole> = self
             .client
-            .get(format!("{}/guilds/{guild_id}/roles", self.api_base_url))
-            .header("Authorization", &self.auth_header)
+            .get(&format!("guilds/{guild_id}/roles"))
             .send()
             .await
             .context("Failed to fetch Discord guild roles")?
@@ -121,11 +111,7 @@ impl RoleManager {
 
         let bot_member: GuildMember = self
             .client
-            .get(format!(
-                "{}/users/@me/guilds/{guild_id}/member",
-                self.api_base_url
-            ))
-            .header("Authorization", &self.auth_header)
+            .get(&format!("users/@me/guilds/{guild_id}/member"))
             .send()
             .await
             .context("Failed to fetch Discord bot guild membership")?
@@ -163,15 +149,11 @@ impl RoleManager {
     /// Returns an error when the member does not exist, the bot lacks permission, or Discord's
     /// REST API request or response fails.
     pub async fn fetch_member_roles(&self, guild_id: &str, user_id: &str) -> Result<Vec<String>> {
-        let url = format!(
-            "{}/guilds/{}/members/{}",
-            self.api_base_url, guild_id, user_id
-        );
+        let path = format!("guilds/{guild_id}/members/{user_id}");
 
         let resp = self
             .client
-            .get(&url)
-            .header("Authorization", &self.auth_header)
+            .get(&path)
             .send()
             .await
             .context("Failed to send fetch_member_roles request")?;
@@ -214,18 +196,14 @@ impl RoleManager {
         role_id: &str,
         action: RoleAction,
     ) -> Result<()> {
-        let url = format!(
-            "{}/guilds/{}/members/{}/roles/{}",
-            self.api_base_url, guild_id, user_id, role_id
-        );
+        let path = format!("guilds/{guild_id}/members/{user_id}/roles/{role_id}");
 
         let request = match action {
-            RoleAction::Add => self.client.put(&url),
-            RoleAction::Remove => self.client.delete(&url),
+            RoleAction::Add => self.client.put(&path),
+            RoleAction::Remove => self.client.delete(&path),
         };
 
         let resp = request
-            .header("Authorization", &self.auth_header)
             .send()
             .await
             .context("Failed to send modify_user_role request")?;
