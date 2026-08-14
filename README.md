@@ -44,6 +44,7 @@ You need Node.js 24, Rust (as specified by [`s-cybersage-rs/rust-toolchain.toml`
 ```sh
 npm ci
 npm run check
+npm run infra:validate
 npm run deploy
 ```
 

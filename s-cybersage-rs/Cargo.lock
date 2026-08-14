@@ -60,7 +60,8 @@ dependencies = [
 
 [[package]]
 name = "athenaeum"
-version = "0.1.0"
+version = "0.1.1"
+source = "git+https://github.com/JarredTD/Athenaeum.git?tag=v0.1.1#7f842908e94567a9678ef24c5b8fba9eca128267"
 dependencies = [
  "anyhow",
  "aws-sdk-secretsmanager",
