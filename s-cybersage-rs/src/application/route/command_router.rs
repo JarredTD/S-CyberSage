@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use athenaeum::discord::DiscordPermissions;
 use athenaeum::interaction::{ApplicationCommandOptionChoice, Interaction, InteractionResponse};
 
 use crate::application::ports::{
@@ -9,9 +10,6 @@ use super::command_data::{ApplicationCommandData, CommandOption};
 
 /// CyberSage command interaction carrying the bot's command schema.
 type InteractionRequest = Interaction<ApplicationCommandData>;
-
-/// Bit position Discord assigns to the Administrator guild permission.
-const ADMINISTRATOR_PERMISSION: u64 = 1 << 3;
 
 /// Routes Discord role commands to persistence and Discord API operations.
 pub struct CommandRouter<R, G> {
@@ -256,8 +254,8 @@ fn has_administrator_permission(interaction: &InteractionRequest) -> bool {
         .member
         .as_ref()
         .and_then(|member| member.permissions.as_deref())
-        .and_then(|permissions| permissions.parse::<u64>().ok())
-        .is_some_and(|permissions| permissions & ADMINISTRATOR_PERMISSION != 0)
+        .and_then(|permissions| DiscordPermissions::from_decimal(permissions).ok())
+        .is_some_and(|permissions| permissions.contains(DiscordPermissions::ADMINISTRATOR))
 }
 
 /// Extracts the focused option value from an autocomplete command payload.
