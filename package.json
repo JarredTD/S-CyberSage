@@ -17,7 +17,7 @@
     "test:rust": "cargo test --locked --manifest-path s-cybersage-rs/Cargo.toml",
     "coverage": "npm run coverage:ts && npm run coverage:rust",
     "coverage:ts": "vitest run --configLoader runner --coverage",
-    "coverage:rust": "cargo llvm-cov --locked --manifest-path s-cybersage-rs/Cargo.toml --lcov --output-path coverage/rust.lcov --ignore-filename-regex '(^|/)(app_context|http_handler|lib|main)\\.rs$|/infrastructure/' --fail-under-lines 90",
+    "coverage:rust": "cargo llvm-cov --locked --manifest-path s-cybersage-rs/Cargo.toml --lcov --output-path coverage/rust.lcov --ignore-filename-regex '(^|/)(app_context|http_handler|lib|main)\\.rs$|/infrastructure/' --fail-under-lines 90 --fail-under-regions 90",
     "infra:validate": "npm run build && cdk synth",
     "audit": "npm audit --omit=dev",
     "predeploy": "npm run build",
