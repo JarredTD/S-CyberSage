@@ -235,4 +235,3 @@ cdk.out/
 cdk.context.json
 .vscode/
 target-cross/
-lambda/

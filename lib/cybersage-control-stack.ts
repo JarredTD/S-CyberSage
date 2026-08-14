@@ -51,7 +51,10 @@ export class CyberSageControlStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
-    const lambdaZip = join(__dirname, '../lambda/s-cybersage-rs/bootstrap.zip');
+    const lambdaZip = join(
+      __dirname,
+      '../s-cybersage-rs/target/lambda/s-cybersage-rs/bootstrap.zip',
+    );
 
     const discordBotHandler = new Function(this, 'DiscordBotHandler', {
       runtime: Runtime.PROVIDED_AL2,

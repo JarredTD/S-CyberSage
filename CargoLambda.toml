@@ -1,4 +1,4 @@
 [build]
 target = ["aarch64-unknown-linux-musl"]
-lambda_dir = "lambda"
+lambda_dir = "s-cybersage-rs/target/lambda"
 output_format = "zip"
