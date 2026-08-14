@@ -47,6 +47,8 @@ npm run check
 npm run deploy
 ```
 
+`npm run coverage` enforces 90% coverage for TypeScript infrastructure and Rust role policy. Lambda startup and live AWS transport adapters are validated through integration and synthesis checks instead of line coverage.
+
 The first deployment creates empty Secrets Manager values. In the AWS console, set:
 
 | Secret             | JSON key | Value                                                         |

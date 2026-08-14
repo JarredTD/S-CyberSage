@@ -57,6 +57,7 @@ export class CyberSageControlStack extends Stack {
       runtime: Runtime.PROVIDED_AL2,
       architecture: Architecture.ARM_64,
       handler: 'bootstrap',
+      // v8 ignore next -- The packaged Lambda exists only after the Rust build, so tests inject code.
       code: props.lambdaCode ?? Code.fromAsset(lambdaZip),
       memorySize: 256,
       timeout: Duration.seconds(10),

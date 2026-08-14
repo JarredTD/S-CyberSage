@@ -9,6 +9,12 @@ export default defineConfig({
       reportsDirectory: 'coverage/typescript',
       include: ['lib/**/*.ts'],
       exclude: ['test/**'],
+      thresholds: {
+        branches: 90,
+        functions: 90,
+        lines: 90,
+        statements: 90,
+      },
     },
   },
 });
