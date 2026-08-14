@@ -52,9 +52,7 @@ impl RoleManager {
     /// * `client` - Reusable HTTP client for Discord REST API calls.
     /// * `bot_token` - Discord bot token used to authenticate those calls.
     pub fn new(client: Client, bot_token: impl Into<String>) -> Self {
-        Self {
-            client: DiscordBotClient::new(client, bot_token),
-        }
+        Self { client: DiscordBotClient::new(client, bot_token) }
     }
 
     /// Creates a role manager that targets a custom Discord-compatible REST endpoint.
@@ -70,9 +68,7 @@ impl RoleManager {
         bot_token: impl Into<String>,
         api_base_url: impl Into<String>,
     ) -> Self {
-        Self {
-            client: DiscordBotClient::with_api_base_url(client, bot_token, api_base_url),
-        }
+        Self { client: DiscordBotClient::with_api_base_url(client, bot_token, api_base_url) }
     }
 
     /// Determines whether the bot can manage a role according to Discord's role hierarchy.
@@ -120,15 +116,10 @@ impl RoleManager {
             .json()
             .await
             .context("Failed to deserialize Discord bot guild membership")?;
-        let bot_roles: Vec<&GuildRole> = roles
-            .iter()
-            .filter(|role| bot_member.roles.iter().any(|id| id == &role.id))
-            .collect();
-        let highest_bot_position = bot_roles
-            .iter()
-            .map(|role| role.position)
-            .max()
-            .unwrap_or_default();
+        let bot_roles: Vec<&GuildRole> =
+            roles.iter().filter(|role| bot_member.roles.iter().any(|id| id == &role.id)).collect();
+        let highest_bot_position =
+            bot_roles.iter().map(|role| role.position).max().unwrap_or_default();
         let bot_permissions = bot_roles.iter().fold(0_u64, |permissions, role| {
             permissions | role.permissions.parse::<u64>().unwrap_or_default()
         });
@@ -164,14 +155,10 @@ impl RoleManager {
             _ => {}
         }
 
-        let resp = resp
-            .error_for_status()
-            .context("Discord returned error while fetching member")?;
+        let resp =
+            resp.error_for_status().context("Discord returned error while fetching member")?;
 
-        let member: GuildMember = resp
-            .json()
-            .await
-            .context("Failed to deserialize GuildMember")?;
+        let member: GuildMember = resp.json().await.context("Failed to deserialize GuildMember")?;
 
         Ok(member.roles)
     }
@@ -203,20 +190,11 @@ impl RoleManager {
             RoleAction::Remove => self.client.delete(&path),
         };
 
-        let resp = request
-            .send()
-            .await
-            .context("Failed to send modify_user_role request")?;
+        let resp = request.send().await.context("Failed to send modify_user_role request")?;
 
         match resp.status() {
             status if status.is_success() => {
-                info!(
-                    guild_id,
-                    user_id,
-                    role_id,
-                    ?action,
-                    "Role modification succeeded"
-                );
+                info!(guild_id, user_id, role_id, ?action, "Role modification succeeded");
                 Ok(())
             }
 
@@ -226,27 +204,14 @@ impl RoleManager {
             }
 
             StatusCode::NOT_FOUND => {
-                error!(
-                    guild_id,
-                    user_id,
-                    role_id,
-                    ?action,
-                    "Role or user not found"
-                );
+                error!(guild_id, user_id, role_id, ?action, "Role or user not found");
                 bail!("Role or user not found")
             }
 
             StatusCode::TOO_MANY_REQUESTS => {
                 let body = resp.text().await.unwrap_or_default();
 
-                warn!(
-                    guild_id,
-                    user_id,
-                    role_id,
-                    ?action,
-                    body,
-                    "Rate limited by Discord"
-                );
+                warn!(guild_id, user_id, role_id, ?action, body, "Rate limited by Discord");
 
                 bail!("Rate limited by Discord API")
             }

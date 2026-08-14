@@ -54,10 +54,7 @@ impl GuildDao {
     /// * `client` - DynamoDB client used for subsequent table operations.
     /// * `table_name` - Name of the table that stores role registrations.
     pub fn new(client: Client, table_name: impl Into<String>) -> Self {
-        Self {
-            client,
-            table_name: table_name.into(),
-        }
+        Self { client, table_name: table_name.into() }
     }
 
     /// Returns up to 25 saved roles whose names begin with the supplied prefix.
@@ -137,22 +134,10 @@ impl GuildDao {
             .item("SK", AttributeValue::S(Keys::role_sk(&normalized)))
             .item("role_id", AttributeValue::S(role_id.to_string()))
             .item("role_name", AttributeValue::S(role_name.to_string()))
-            .item(
-                "role_name_lookup_pk",
-                AttributeValue::S(Keys::role_name_lookup_pk(guild_id)),
-            )
-            .item(
-                "role_name_lookup_sk",
-                AttributeValue::S(Keys::role_name_lookup_sk(&normalized)),
-            )
-            .item(
-                "role_id_lookup_pk",
-                AttributeValue::S(Keys::role_id_lookup_pk(guild_id)),
-            )
-            .item(
-                "role_id_lookup_sk",
-                AttributeValue::S(Keys::role_id_lookup_sk(role_id)),
-            )
+            .item("role_name_lookup_pk", AttributeValue::S(Keys::role_name_lookup_pk(guild_id)))
+            .item("role_name_lookup_sk", AttributeValue::S(Keys::role_name_lookup_sk(&normalized)))
+            .item("role_id_lookup_pk", AttributeValue::S(Keys::role_id_lookup_pk(guild_id)))
+            .item("role_id_lookup_sk", AttributeValue::S(Keys::role_id_lookup_sk(role_id)))
             .send()
             .await
             .context("Failed to save role")?;
@@ -200,14 +185,11 @@ impl GuildDao {
             .await
             .context("Failed to query role by name")?;
 
-        Ok(response
-            .items
-            .and_then(|mut items| items.pop())
-            .and_then(|item| {
-                let name = item.get("role_name")?.as_s().ok()?.to_string();
-                let id = item.get("role_id")?.as_s().ok()?.to_string();
-                Some((name, id))
-            }))
+        Ok(response.items.and_then(|mut items| items.pop()).and_then(|item| {
+            let name = item.get("role_name")?.as_s().ok()?.to_string();
+            let id = item.get("role_id")?.as_s().ok()?.to_string();
+            Some((name, id))
+        }))
     }
 }
 
@@ -217,14 +199,9 @@ impl GuildRoleRepository for GuildDao {
         guild_id: &str,
         prefix: &str,
     ) -> Result<Vec<RoleRegistration>> {
-        self.query_roles_by_prefix(guild_id, prefix)
-            .await
-            .map(|roles| {
-                roles
-                    .into_iter()
-                    .map(|(name, id)| RoleRegistration { name, id })
-                    .collect()
-            })
+        self.query_roles_by_prefix(guild_id, prefix).await.map(|roles| {
+            roles.into_iter().map(|(name, id)| RoleRegistration { name, id }).collect()
+        })
     }
 
     async fn save_role(&self, guild_id: &str, role: &RoleRegistration) -> Result<()> {

@@ -54,34 +54,21 @@ pub(crate) async fn function_handler(
         Ok(s) => s,
         Err(e) => {
             tracing::error!(error = %e, "invalid utf8 body");
-            return Ok(json_response(
-                400,
-                &json!({ "error": "Invalid request body" }),
-            ));
+            return Ok(json_response(400, &json!({ "error": "Invalid request body" })));
         }
     };
 
     let headers = event.headers();
 
-    let signature = headers
-        .get(SIG_HEADER)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+    let signature = headers.get(SIG_HEADER).and_then(|v| v.to_str().ok()).unwrap_or("");
 
-    let timestamp = headers
-        .get(TS_HEADER)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+    let timestamp = headers.get(TS_HEADER).and_then(|v| v.to_str().ok()).unwrap_or("");
 
     if let Err(e) =
-        ctx.interaction_verifier
-            .verify(signature, timestamp, body_bytes, &ctx.discord_public_key)
+        ctx.interaction_verifier.verify(signature, timestamp, body_bytes, &ctx.discord_public_key)
     {
         tracing::warn!(error = %e, "signature verification failed");
-        return Ok(json_response(
-            401,
-            &json!({ "error": "Invalid request signature" }),
-        ));
+        return Ok(json_response(401, &json!({ "error": "Invalid request signature" })));
     }
 
     let interaction: Interaction<ApplicationCommandData> = match serde_json::from_str(body_str) {
@@ -95,30 +82,23 @@ pub(crate) async fn function_handler(
     tracing::debug!(interaction_type = ?interaction.kind);
 
     if matches!(interaction.kind, InteractionKind::ApplicationCommand) {
-        ctx.interaction_responder
-            .defer_ephemeral(&interaction)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, "failed to defer Discord interaction");
-                Error::from("Failed to defer Discord interaction")
-            })?;
+        ctx.interaction_responder.defer_ephemeral(&interaction).await.map_err(|e| {
+            tracing::error!(error = %e, "failed to defer Discord interaction");
+            Error::from("Failed to defer Discord interaction")
+        })?;
 
         let response = route_interaction(ctx, &interaction).await;
-        ctx.interaction_responder
-            .update_original_response(&interaction, &response)
-            .await
-            .map_err(|e| {
+        ctx.interaction_responder.update_original_response(&interaction, &response).await.map_err(
+            |e| {
                 tracing::error!(error = %e, "failed to update deferred Discord interaction");
                 Error::from("Failed to update Discord interaction")
-            })?;
+            },
+        )?;
 
         return Ok(accepted_response());
     }
 
-    Ok(json_response(
-        200,
-        &route_interaction(ctx, &interaction).await,
-    ))
+    Ok(json_response(200, &route_interaction(ctx, &interaction).await))
 }
 
 /// Routes an interaction and converts application failures into a safe ephemeral response.

@@ -1,8 +1,4 @@
-#![deny(
-    missing_docs,
-    clippy::missing_docs_in_private_items,
-    clippy::missing_errors_doc
-)]
+#![deny(missing_docs, clippy::missing_docs_in_private_items, clippy::missing_errors_doc)]
 //! Application library for the S-CyberSage Discord interaction handler.
 
 use lambda_http::{run, service_fn, Error};
@@ -24,11 +20,7 @@ pub(crate) mod infrastructure;
 /// Returns an error when logging, HTTP client construction, or Lambda runtime startup fails.
 pub async fn run_lambda() -> Result<(), Error> {
     tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_target(false)
-                .with_level(true),
-        )
+        .with(tracing_subscriber::fmt::layer().with_target(false).with_level(true))
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .init();
 

@@ -27,10 +27,7 @@ impl<R, G> CommandRouter<R, G> {
     /// * `guild_repository` - Persistence adapter for registered self-assignable roles.
     /// * `member_role_gateway` - Discord adapter that changes member role assignments.
     pub fn new(guild_repository: R, member_role_gateway: G) -> Self {
-        Self {
-            guild_repository,
-            member_role_gateway,
-        }
+        Self { guild_repository, member_role_gateway }
     }
 }
 
@@ -54,16 +51,9 @@ where
     ) -> Result<InteractionResponse> {
         let guild_id = require_guild_id(interaction)?;
 
-        let prefix = interaction
-            .data
-            .as_ref()
-            .and_then(extract_first_option_value)
-            .unwrap_or("");
+        let prefix = interaction.data.as_ref().and_then(extract_first_option_value).unwrap_or("");
 
-        let roles = self
-            .guild_repository
-            .query_roles_by_prefix(guild_id, prefix)
-            .await?;
+        let roles = self.guild_repository.query_roles_by_prefix(guild_id, prefix).await?;
 
         let choices = roles
             .into_iter()
@@ -93,16 +83,10 @@ where
     ) -> Result<InteractionResponse> {
         let guild_id = require_guild_id(interaction)?;
 
-        let cmd_data = interaction
-            .data
-            .as_ref()
-            .ok_or_else(|| anyhow!("Missing command data"))?;
+        let cmd_data = interaction.data.as_ref().ok_or_else(|| anyhow!("Missing command data"))?;
 
         match cmd_data.name.as_str() {
-            "role" => {
-                self.handle_role_command(guild_id, cmd_data, interaction)
-                    .await
-            }
+            "role" => self.handle_role_command(guild_id, cmd_data, interaction).await,
             _ => Ok(InteractionResponse::ephemeral("Unknown command.")),
         }
     }
@@ -114,16 +98,10 @@ where
         cmd_data: &ApplicationCommandData,
         interaction: &InteractionRequest,
     ) -> Result<InteractionResponse> {
-        let subcommand = cmd_data
-            .options
-            .first()
-            .ok_or_else(|| anyhow!("Missing subcommand"))?;
+        let subcommand = cmd_data.options.first().ok_or_else(|| anyhow!("Missing subcommand"))?;
 
         match subcommand.name.as_str() {
-            "save" => {
-                self.handle_save(guild_id, subcommand, cmd_data, interaction)
-                    .await
-            }
+            "save" => self.handle_save(guild_id, subcommand, cmd_data, interaction).await,
             "toggle" => self.handle_toggle(guild_id, subcommand, interaction).await,
             _ => Ok(InteractionResponse::ephemeral("Unknown subcommand.")),
         }
@@ -157,29 +135,17 @@ where
             .map(|r| r.name.clone())
             .ok_or_else(|| anyhow!("Resolved role missing"))?;
 
-        if !self
-            .member_role_gateway
-            .can_manage_role(guild_id, role_id)
-            .await?
-        {
+        if !self.member_role_gateway.can_manage_role(guild_id, role_id).await? {
             return Ok(InteractionResponse::ephemeral(
                 "I need Manage Roles permission and a bot role above this role before I can register it.",
             ));
         }
 
         self.guild_repository
-            .save_role(
-                guild_id,
-                &RoleRegistration {
-                    id: role_id.to_string(),
-                    name: role_name,
-                },
-            )
+            .save_role(guild_id, &RoleRegistration { id: role_id.to_string(), name: role_name })
             .await?;
 
-        Ok(InteractionResponse::ephemeral(
-            "Role registered successfully.",
-        ))
+        Ok(InteractionResponse::ephemeral("Role registered successfully."))
     }
 
     /// Adds or removes the selected self-assignable role for the invoking member.
@@ -204,22 +170,14 @@ where
 
         let user_id = require_user_id(interaction)?;
 
-        let member_roles = self
-            .member_role_gateway
-            .fetch_member_roles(guild_id, user_id)
-            .await?;
+        let member_roles = self.member_role_gateway.fetch_member_roles(guild_id, user_id).await?;
 
         let has_role = member_roles.iter().any(|role_id| role_id == &role.id);
 
-        let action = if has_role {
-            RoleMembershipAction::Remove
-        } else {
-            RoleMembershipAction::Add
-        };
+        let action =
+            if has_role { RoleMembershipAction::Remove } else { RoleMembershipAction::Add };
 
-        self.member_role_gateway
-            .modify_user_role(guild_id, user_id, &role.id, action)
-            .await?;
+        self.member_role_gateway.modify_user_role(guild_id, user_id, &role.id, action).await?;
 
         let message = if has_role {
             format!("Removed '{}'.", role.name)
@@ -233,10 +191,7 @@ where
 
 /// Returns the guild ID required by a guild-scoped interaction.
 fn require_guild_id(interaction: &InteractionRequest) -> Result<&str> {
-    interaction
-        .guild_id
-        .as_deref()
-        .ok_or_else(|| anyhow!("Missing guild_id"))
+    interaction.guild_id.as_deref().ok_or_else(|| anyhow!("Missing guild_id"))
 }
 
 /// Returns the invoking user's ID required by a guild interaction.
@@ -320,11 +275,7 @@ mod tests {
             _guild_id: &str,
             role_name: &str,
         ) -> Result<Option<RoleRegistration>> {
-            Ok(self
-                .roles
-                .iter()
-                .find(|role| role.name.eq_ignore_ascii_case(role_name))
-                .cloned())
+            Ok(self.roles.iter().find(|role| role.name.eq_ignore_ascii_case(role_name)).cloned())
         }
     }
 
@@ -355,15 +306,12 @@ mod tests {
             role_id: &str,
             action: RoleMembershipAction,
         ) -> Result<()> {
-            self.changes
-                .lock()
-                .expect("fake gateway lock should not be poisoned")
-                .push((
-                    guild_id.to_string(),
-                    user_id.to_string(),
-                    role_id.to_string(),
-                    action,
-                ));
+            self.changes.lock().expect("fake gateway lock should not be poisoned").push((
+                guild_id.to_string(),
+                user_id.to_string(),
+                role_id.to_string(),
+                action,
+            ));
             Ok(())
         }
     }
@@ -371,23 +319,15 @@ mod tests {
     /// Confirms that the Administrator permission grants access to role registration.
     #[test]
     fn permits_administrator() {
-        assert!(has_administrator_permission(&interaction_with_permissions(
-            Some("8")
-        )));
+        assert!(has_administrator_permission(&interaction_with_permissions(Some("8"))));
     }
 
     /// Confirms that absent, malformed, and unrelated permissions are denied.
     #[test]
     fn denies_non_administrators() {
-        assert!(!has_administrator_permission(
-            &interaction_with_permissions(None)
-        ));
-        assert!(!has_administrator_permission(
-            &interaction_with_permissions(Some("invalid"))
-        ));
-        assert!(!has_administrator_permission(
-            &interaction_with_permissions(Some("32"))
-        ));
+        assert!(!has_administrator_permission(&interaction_with_permissions(None)));
+        assert!(!has_administrator_permission(&interaction_with_permissions(Some("invalid"))));
+        assert!(!has_administrator_permission(&interaction_with_permissions(Some("32"))));
     }
 
     /// Confirms that unauthorized role saves never reach persistence.
@@ -396,10 +336,7 @@ mod tests {
         let repository = Arc::new(FakeRoleRepository::default());
         let router = CommandRouter::new(
             repository.clone(),
-            Arc::new(FakeMemberRoleGateway {
-                can_manage_roles: true,
-                ..Default::default()
-            }),
+            Arc::new(FakeMemberRoleGateway { can_manage_roles: true, ..Default::default() }),
         );
 
         let response = router
@@ -424,10 +361,7 @@ mod tests {
         let repository = Arc::new(FakeRoleRepository::default());
         let router = CommandRouter::new(
             repository.clone(),
-            Arc::new(FakeMemberRoleGateway {
-                can_manage_roles: true,
-                ..Default::default()
-            }),
+            Arc::new(FakeMemberRoleGateway { can_manage_roles: true, ..Default::default() }),
         );
 
         let response = router
@@ -453,10 +387,8 @@ mod tests {
     #[tokio::test]
     async fn rejects_role_the_bot_cannot_manage() {
         let repository = Arc::new(FakeRoleRepository::default());
-        let router = CommandRouter::new(
-            repository.clone(),
-            Arc::new(FakeMemberRoleGateway::default()),
-        );
+        let router =
+            CommandRouter::new(repository.clone(), Arc::new(FakeMemberRoleGateway::default()));
 
         let response = router
             .handle_command(&save_interaction(Some("8")))
@@ -477,28 +409,20 @@ mod tests {
     /// Confirms that toggling an absent role delegates an add operation to Discord.
     #[tokio::test]
     async fn adds_role_when_member_does_not_have_it() {
-        let repository = Arc::new(FakeRoleRepository {
-            roles: vec![role_registration()],
-            ..Default::default()
-        });
+        let repository =
+            Arc::new(FakeRoleRepository { roles: vec![role_registration()], ..Default::default() });
         let gateway = Arc::new(FakeMemberRoleGateway::default());
         let router = CommandRouter::new(repository, gateway.clone());
 
-        let response = router
-            .handle_command(&toggle_interaction())
-            .await
-            .expect("toggle should succeed");
+        let response =
+            router.handle_command(&toggle_interaction()).await.expect("toggle should succeed");
 
         assert_eq!(
             response.data.and_then(|data| data.content).as_deref(),
             Some("Added 'Moderator'.")
         );
         assert_eq!(
-            gateway
-                .changes
-                .lock()
-                .expect("fake gateway lock should not be poisoned")
-                .as_slice(),
+            gateway.changes.lock().expect("fake gateway lock should not be poisoned").as_slice(),
             [(
                 "guild".to_string(),
                 "user".to_string(),
@@ -512,10 +436,7 @@ mod tests {
     #[tokio::test]
     async fn returns_matching_autocomplete_choices() {
         let router = CommandRouter::new(
-            Arc::new(FakeRoleRepository {
-                roles: vec![role_registration()],
-                ..Default::default()
-            }),
+            Arc::new(FakeRoleRepository { roles: vec![role_registration()], ..Default::default() }),
             Arc::new(FakeMemberRoleGateway::default()),
         );
 
@@ -564,31 +485,23 @@ mod tests {
     /// Confirms that a member who already holds a registered role has it removed.
     #[tokio::test]
     async fn removes_role_when_member_already_has_it() {
-        let repository = Arc::new(FakeRoleRepository {
-            roles: vec![role_registration()],
-            ..Default::default()
-        });
+        let repository =
+            Arc::new(FakeRoleRepository { roles: vec![role_registration()], ..Default::default() });
         let gateway = Arc::new(FakeMemberRoleGateway {
             member_roles: vec!["role-id".to_string()],
             ..Default::default()
         });
         let router = CommandRouter::new(repository, gateway.clone());
 
-        let response = router
-            .handle_command(&toggle_interaction())
-            .await
-            .expect("toggle should succeed");
+        let response =
+            router.handle_command(&toggle_interaction()).await.expect("toggle should succeed");
 
         assert_eq!(
             response.data.and_then(|data| data.content).as_deref(),
             Some("Removed 'Moderator'.")
         );
         assert_eq!(
-            gateway
-                .changes
-                .lock()
-                .expect("fake gateway lock should not be poisoned")[0]
-                .3,
+            gateway.changes.lock().expect("fake gateway lock should not be poisoned")[0].3,
             RoleMembershipAction::Remove
         );
     }
@@ -605,9 +518,7 @@ mod tests {
             channel_id: None,
             member: Some(Member {
                 permissions: permissions.map(str::to_string),
-                user: User {
-                    id: "user".to_string(),
-                },
+                user: User { id: "user".to_string() },
             }),
         }
     }
@@ -615,12 +526,7 @@ mod tests {
     /// Builds a save command with a resolved Discord role.
     fn save_interaction(permissions: Option<&str>) -> InteractionRequest {
         let mut roles = HashMap::new();
-        roles.insert(
-            "role-id".to_string(),
-            ResolvedRole {
-                name: "Moderator".to_string(),
-            },
-        );
+        roles.insert("role-id".to_string(), ResolvedRole { name: "Moderator".to_string() });
 
         InteractionRequest {
             data: Some(ApplicationCommandData {
@@ -680,9 +586,6 @@ mod tests {
 
     /// Returns the role used by persistence and toggle tests.
     fn role_registration() -> RoleRegistration {
-        RoleRegistration {
-            name: "Moderator".to_string(),
-            id: "role-id".to_string(),
-        }
+        RoleRegistration { name: "Moderator".to_string(), id: "role-id".to_string() }
     }
 }

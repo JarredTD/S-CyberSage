@@ -52,9 +52,9 @@ where
             }
             InteractionKind::MessageComponent
             | InteractionKind::ModalSubmit
-            | InteractionKind::Unknown => Ok(InteractionResponse::ephemeral(
-                "Unsupported interaction type.",
-            )),
+            | InteractionKind::Unknown => {
+                Ok(InteractionResponse::ephemeral("Unsupported interaction type."))
+            }
         }
     }
 }
