@@ -20,7 +20,7 @@ describe('CyberSageControlStack', () => {
       Architectures: ['arm64'],
       MemorySize: 256,
       Timeout: 10,
-      Runtime: 'provided.al2',
+      Runtime: 'provided.al2023',
       Environment: {
         Variables: Match.objectLike({
           MAIN_TABLE_NAME: { 'Fn::ImportValue': Match.anyValue() },

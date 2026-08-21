@@ -4,15 +4,22 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ['v*']
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  ci:
+  quality:
+    name: Quality gates
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
@@ -28,8 +35,9 @@ jobs:
         with:
           version: 0.14.0
 
+      - uses: taiki-e/install-action@5b4d68e2e660441203ab128a23676f1e4faf1532 # v2
+        with:
+          tool: cargo-llvm-cov@0.9.0,cargo-audit@0.22.2
+
       - run: npm ci
       - run: npm run check
-      - run: cargo install cargo-llvm-cov --version 0.8.7 --locked
-      - run: npm run coverage
-      - run: npm run infra:validate

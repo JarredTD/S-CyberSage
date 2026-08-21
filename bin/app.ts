@@ -2,6 +2,8 @@
 import 'source-map-support/register';
 import { App, Aspects } from 'aws-cdk-lib';
 import { AwsSolutionsChecks } from 'cdk-nag';
+import { Code } from 'aws-cdk-lib/aws-lambda';
+import { join } from 'node:path';
 
 import { CyberSageDataStack } from '../lib/cybersage-data-stack';
 import { CyberSageControlStack } from '../lib/cybersage-control-stack';
@@ -24,6 +26,7 @@ const dataStack = new CyberSageDataStack(app, 'S-CyberSageDataStack', {
 new CyberSageControlStack(app, 'S-CyberSageControlStack', {
   env,
   mainTable: dataStack.mainTable,
+  lambdaCode: Code.fromAsset(join(__dirname, '../lambda/s-cybersage-rs/bootstrap.zip')),
 });
 
 Aspects.of(app).add(new AwsSolutionsChecks());

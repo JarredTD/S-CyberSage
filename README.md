@@ -25,10 +25,10 @@ AWS deployment requires credentials for the target account and an existing Disco
 
 ## Usage
 
-| Command               | Who can use it | Result                                      |
-| --------------------- | -------------- | ------------------------------------------- |
-| `/role save <role>`   | Administrators | Registers a role as self-assignable.        |
-| `/role toggle <role>` | Any member     | Adds or removes a registered role.          |
+| Command               | Who can use it | Result                               |
+| --------------------- | -------------- | ------------------------------------ |
+| `/role save <role>`   | Administrators | Registers a role as self-assignable. |
+| `/role toggle <role>` | Any member     | Adds or removes a registered role.   |
 
 To deploy the application and register its guild commands:
 

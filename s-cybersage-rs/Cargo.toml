@@ -3,6 +3,8 @@ name = "s-cybersage-rs"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.94.1"
+license = "AGPL-3.0-only"
+description = "Application runtime for the S-CyberSage Discord role bot"
 
 [dependencies]
 anyhow = "1.0.99"

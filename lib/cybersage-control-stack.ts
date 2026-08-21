@@ -3,18 +3,17 @@ import type { StackProps } from 'aws-cdk-lib';
 import type { Construct } from 'constructs';
 import { RetentionDays, LogGroup } from 'aws-cdk-lib/aws-logs';
 import { NagSuppressions } from 'cdk-nag';
-import { Function, Runtime, Code, Architecture } from 'aws-cdk-lib/aws-lambda';
+import { Function, Runtime, Architecture } from 'aws-cdk-lib/aws-lambda';
 import type { Code as LambdaCode } from 'aws-cdk-lib/aws-lambda';
 import { HttpApi, HttpMethod, CfnStage } from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import type { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
-import { join } from 'path';
 
 /** Properties required to create the control-plane stack. */
 interface Props extends StackProps {
   mainTable: Table;
-  lambdaCode?: LambdaCode;
+  lambdaCode: LambdaCode;
 }
 
 /** Deploys the Discord interaction API, Lambda function, and application secrets. */
@@ -51,13 +50,11 @@ export class CyberSageControlStack extends Stack {
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
-    const lambdaZip = join(__dirname, '../lambda/s-cybersage-rs/bootstrap.zip');
-
     const discordBotHandler = new Function(this, 'DiscordBotHandler', {
-      runtime: Runtime.PROVIDED_AL2,
+      runtime: Runtime.PROVIDED_AL2023,
       architecture: Architecture.ARM_64,
       handler: 'bootstrap',
-      code: props.lambdaCode ?? Code.fromAsset(lambdaZip),
+      code: props.lambdaCode,
       memorySize: 256,
       timeout: Duration.seconds(10),
       logGroup,
