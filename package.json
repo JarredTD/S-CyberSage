@@ -1,6 +1,6 @@
 {
   "name": "s-cyber-sage",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Serverless Discord bot for self-assignable guild roles",
   "private": true,
   "scripts": {
