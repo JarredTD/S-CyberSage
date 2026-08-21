@@ -6,10 +6,10 @@ rust-version = "1.94.1"
 
 [dependencies]
 anyhow = "1.0.99"
-athenaeum = { git = "https://github.com/JarredTD/Athenaeum.git", tag = "v0.1.0", features = ["http"] }
+athenaeum = { git = "https://github.com/JarredTD/Athenaeum.git", tag = "v0.1.1", features = ["http"] }
 aws-config = { version = "1.8.6", features = ["behavior-version-latest"] }
-aws-sdk-dynamodb = { version = "1.93.0", features = ["behavior-version-latest"] }
-aws-sdk-secretsmanager = { version = "1.88.0", features = ["behavior-version-latest"] }
+aws-sdk-dynamodb = { version = "1.93.0", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
+aws-sdk-secretsmanager = { version = "1.88.0", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
 lambda_http = "0.17.0"
 lambda_runtime = { version = "0.14.4", features = ["anyhow"] }
 reqwest = { version = "0.12.23", default-features = false, features = ["json", "rustls-tls"] }

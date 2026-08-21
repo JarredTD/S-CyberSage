@@ -50,7 +50,9 @@ where
             InteractionKind::ApplicationCommand => {
                 self.command_router.handle_command(interaction).await
             }
-            InteractionKind::Unknown => Ok(InteractionResponse::ephemeral(
+            InteractionKind::MessageComponent
+            | InteractionKind::ModalSubmit
+            | InteractionKind::Unknown => Ok(InteractionResponse::ephemeral(
                 "Unsupported interaction type.",
             )),
         }
@@ -144,15 +146,21 @@ mod tests {
     /// Confirms that unsupported interactions receive an ephemeral response.
     #[tokio::test]
     async fn rejects_unknown_interaction() {
-        let response = router()
-            .route(&interaction(InteractionKind::Unknown))
-            .await
-            .expect("unsupported interaction should produce a response");
+        for kind in [
+            InteractionKind::MessageComponent,
+            InteractionKind::ModalSubmit,
+            InteractionKind::Unknown,
+        ] {
+            let response = router()
+                .route(&interaction(kind))
+                .await
+                .expect("unsupported interaction should produce a response");
 
-        assert_eq!(
-            response.data.and_then(|data| data.content).as_deref(),
-            Some("Unsupported interaction type.")
-        );
+            assert_eq!(
+                response.data.and_then(|data| data.content).as_deref(),
+                Some("Unsupported interaction type.")
+            );
+        }
     }
 
     /// Delegates autocomplete interactions to the command router.
@@ -246,6 +254,7 @@ mod tests {
             kind,
             data: None,
             guild_id: None,
+            channel_id: None,
             member: None,
         }
     }
