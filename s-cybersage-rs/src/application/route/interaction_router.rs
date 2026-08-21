@@ -60,14 +60,21 @@ where
 /// Tests interaction dispatch without infrastructure adapters.
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use anyhow::Result;
 
     use super::InteractionRouter;
     use crate::application::{
         ports::{GuildRoleRepository, MemberRoleGateway, RoleMembershipAction, RoleRegistration},
-        route::{command_data::ApplicationCommandData, command_router::CommandRouter},
+        route::{
+            command_data::{ApplicationCommandData, CommandOption, ResolvedData, ResolvedRole},
+            command_router::CommandRouter,
+        },
     };
-    use athenaeum::interaction::{Interaction, InteractionCallbackType, InteractionKind};
+    use athenaeum::interaction::{
+        Interaction, InteractionCallbackType, InteractionKind, Member, User,
+    };
 
     /// CyberSage command interaction carrying the bot's command schema.
     type InteractionRequest = Interaction<ApplicationCommandData>;
@@ -93,7 +100,10 @@ mod tests {
             _guild_id: &str,
             _role_name: &str,
         ) -> Result<Option<RoleRegistration>> {
-            Ok(None)
+            Ok(Some(RoleRegistration {
+                id: "role-id".to_string(),
+                name: "Moderator".to_string(),
+            }))
         }
     }
 
@@ -145,6 +155,83 @@ mod tests {
         );
     }
 
+    /// Delegates autocomplete interactions to the command router.
+    #[tokio::test]
+    async fn routes_autocomplete_interaction() {
+        let mut request = interaction(InteractionKind::ApplicationCommandAutocomplete);
+        request.guild_id = Some("guild".to_string());
+
+        let response = router()
+            .route(&request)
+            .await
+            .expect("autocomplete should route");
+
+        assert!(matches!(
+            response.kind,
+            InteractionCallbackType::ApplicationCommandAutocompleteResult
+        ));
+    }
+
+    /// Delegates application commands to the command router.
+    #[tokio::test]
+    async fn routes_application_command() {
+        let mut request = interaction(InteractionKind::ApplicationCommand);
+        request.guild_id = Some("guild".to_string());
+        request.data = Some(ApplicationCommandData {
+            name: "unknown".to_string(),
+            options: vec![],
+            resolved: None,
+        });
+
+        let response = router()
+            .route(&request)
+            .await
+            .expect("command should route");
+
+        assert_eq!(
+            response.data.and_then(|data| data.content).as_deref(),
+            Some("Unknown command.")
+        );
+    }
+
+    /// Routes role registration and membership changes through every application port.
+    #[tokio::test]
+    async fn routes_role_commands() {
+        let mut toggle = interaction(InteractionKind::ApplicationCommand);
+        toggle.guild_id = Some("guild".to_string());
+        toggle.member = Some(member(None));
+        toggle.data = Some(role_command("toggle", "Moderator", None));
+        let toggle_response = router().route(&toggle).await.expect("toggle should route");
+        assert_eq!(
+            toggle_response
+                .data
+                .and_then(|data| data.content)
+                .as_deref(),
+            Some("Added 'Moderator'.")
+        );
+
+        let mut roles = HashMap::new();
+        roles.insert(
+            "role-id".to_string(),
+            ResolvedRole {
+                name: "Moderator".to_string(),
+            },
+        );
+        let mut save = interaction(InteractionKind::ApplicationCommand);
+        save.guild_id = Some("guild".to_string());
+        save.member = Some(member(Some("8")));
+        save.data = Some(role_command(
+            "save",
+            "role-id",
+            Some(ResolvedData { roles }),
+        ));
+        let save_response = router().route(&save).await.expect("save should route");
+        assert_eq!(
+            save_response.data.and_then(|data| data.content).as_deref(),
+            Some("Role registered successfully.")
+        );
+    }
+
     /// Builds the router with inert dependencies for pure dispatch tests.
     fn router() -> InteractionRouter<NoopRepository, NoopMemberRoleGateway> {
         InteractionRouter::new(CommandRouter::new(NoopRepository, NoopMemberRoleGateway))
@@ -160,6 +247,37 @@ mod tests {
             data: None,
             guild_id: None,
             member: None,
+        }
+    }
+
+    /// Builds a role command with one string-valued role option.
+    fn role_command(
+        action: &str,
+        value: &str,
+        resolved: Option<ResolvedData>,
+    ) -> ApplicationCommandData {
+        ApplicationCommandData {
+            name: "role".to_string(),
+            options: vec![CommandOption {
+                name: action.to_string(),
+                value: None,
+                options: vec![CommandOption {
+                    name: "role".to_string(),
+                    value: Some(serde_json::Value::String(value.to_string())),
+                    options: vec![],
+                }],
+            }],
+            resolved,
+        }
+    }
+
+    /// Builds a guild member with optional Discord permission bits.
+    fn member(permissions: Option<&str>) -> Member {
+        Member {
+            permissions: permissions.map(str::to_string),
+            user: User {
+                id: "user".to_string(),
+            },
         }
     }
 }
