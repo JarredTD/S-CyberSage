@@ -9,7 +9,7 @@
   },
   "packageManager": "npm@11.17.0",
   "scripts": {
-    "build": "cargo lambda build --locked --release --arm64 --manifest-path s-cybersage-rs/Cargo.toml --lambda-dir s-cybersage-rs/target/lambda",
+    "build": "cargo lambda build --locked --release --manifest-path s-cybersage-rs/Cargo.toml --lambda-dir s-cybersage-rs/target/lambda",
     "check": "npm run format:check && npm run lint && npm run docs && npm run typecheck && npm run coverage && npm run audit && npm run infra:validate",
     "format": "prettier --write . && cargo fmt --manifest-path s-cybersage-rs/Cargo.toml",
     "format:check": "prettier --check . && cargo fmt --check --manifest-path s-cybersage-rs/Cargo.toml",
