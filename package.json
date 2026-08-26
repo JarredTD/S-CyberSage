@@ -29,8 +29,8 @@
     "audit": "npm run audit:node && npm run audit:rust",
     "audit:node": "npm audit",
     "audit:rust": "cargo audit --file s-cybersage-rs/Cargo.lock",
-    "predeploy": "npm run build",
-    "deploy": "bash -c 'cdk deploy --all \"$@\"' --",
+    "predeploy": "npm run check",
+    "deploy": "cdk deploy --all",
     "register-commands": "tsx commands/register-commands.ts"
   },
   "dependencies": {
