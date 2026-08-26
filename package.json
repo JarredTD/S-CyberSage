@@ -1,6 +1,6 @@
 {
   "name": "s-cyber-sage",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Serverless Discord bot for self-assignable guild roles",
   "private": true,
   "license": "AGPL-3.0-only",
