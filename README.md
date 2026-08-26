@@ -17,7 +17,8 @@ S-CyberSage is a serverless Discord bot for managing self-assignable roles in a 
 
 ## Setup
 
-Install Node.js 24, Rust from `rust-toolchain.toml`, Cargo Lambda, and Zig 0.14. Then install the locked Node dependencies:
+Install [Node.js 24.19.0](https://nodejs.org/download/release/v24.19.0/), Rust from
+`rust-toolchain.toml`, Cargo Lambda, and Zig 0.14. Then install the locked Node dependencies:
 
 ```sh
 npm ci
