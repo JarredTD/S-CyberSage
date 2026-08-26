@@ -26,7 +26,7 @@ const dataStack = new CyberSageDataStack(app, 'S-CyberSageDataStack', {
 new CyberSageControlStack(app, 'S-CyberSageControlStack', {
   env,
   mainTable: dataStack.mainTable,
-  lambdaCode: Code.fromAsset(join(__dirname, '../lambda/s-cybersage-rs/bootstrap.zip')),
+  lambdaCode: Code.fromAsset(join(__dirname, '../s-cybersage-rs/target/lambda/s-cybersage-rs')),
 });
 
 Aspects.of(app).add(new AwsSolutionsChecks());
