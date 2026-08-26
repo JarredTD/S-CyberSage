@@ -4,6 +4,8 @@ import type { Construct } from 'constructs';
 import { NagSuppressions } from 'cdk-nag';
 import { Table, AttributeType, BillingMode, ProjectionType } from 'aws-cdk-lib/aws-dynamodb';
 
+import { applyResourceTags } from './resource-tags';
+
 /** Deploys the persistent storage used by the Discord bot. */
 export class CyberSageDataStack extends Stack {
   public readonly mainTable: Table;
@@ -17,6 +19,7 @@ export class CyberSageDataStack extends Stack {
    */
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
+    applyResourceTags(this, 'data');
 
     this.mainTable = new Table(this, 'CyberSageMainTable', {
       tableName: 'CyberSageMain',

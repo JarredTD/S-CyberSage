@@ -21,6 +21,13 @@ describe('CyberSageControlStack', () => {
       MemorySize: 256,
       Timeout: 10,
       Runtime: 'provided.al2023',
+      Tags: Match.arrayWith([
+        { Key: 'Component', Value: 'interaction-api' },
+        { Key: 'DeploymentBoundary', Value: 'discord-cybersage' },
+        { Key: 'Environment', Value: 'prod' },
+        { Key: 'ManagedBy', Value: 'aws-cdk' },
+        { Key: 'Project', Value: 's-cybersage' },
+      ]),
       Environment: {
         Variables: Match.objectLike({
           MAIN_TABLE_NAME: { 'Fn::ImportValue': Match.anyValue() },

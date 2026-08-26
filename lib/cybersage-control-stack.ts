@@ -10,6 +10,8 @@ import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations
 import type { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 
+import { applyResourceTags, tagComponent } from './resource-tags';
+
 /** Properties required to create the control-plane stack. */
 interface Props extends StackProps {
   mainTable: Table;
@@ -27,6 +29,7 @@ export class CyberSageControlStack extends Stack {
    */
   constructor(scope: Construct, id: string, props: Props) {
     super(scope, id, props);
+    applyResourceTags(this, 'control');
 
     const discordTokenSecret = new Secret(this, 'DiscordTokenSecret', {
       description: 'Discord Bot Token',
@@ -43,6 +46,8 @@ export class CyberSageControlStack extends Stack {
         generateStringKey: 'key',
       },
     });
+    tagComponent(discordTokenSecret, 'credentials');
+    tagComponent(discordPublicKeySecret, 'credentials');
 
     const logGroup = new LogGroup(this, 'DiscordBotLogGroup', {
       logGroupName: '/aws/lambda/discord-bot-handler',
@@ -65,6 +70,8 @@ export class CyberSageControlStack extends Stack {
         RUST_LOG: 'info',
       },
     });
+    tagComponent(logGroup, 'interaction-api');
+    tagComponent(discordBotHandler, 'interaction-api');
 
     props.mainTable.grantReadWriteData(discordBotHandler);
     discordTokenSecret.grantRead(discordBotHandler);
@@ -74,6 +81,7 @@ export class CyberSageControlStack extends Stack {
       description: 'HTTP API for Discord bot interactions',
       createDefaultStage: false,
     });
+    tagComponent(api, 'interaction-api');
 
     new CfnStage(this, 'ProdStage', {
       apiId: api.apiId,

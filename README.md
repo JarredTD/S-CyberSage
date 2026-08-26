@@ -12,6 +12,8 @@ S-CyberSage is a serverless Discord bot for managing self-assignable roles in a 
 - Stores role registrations in DynamoDB.
 - Verifies Discord interaction signatures before processing commands.
 - Deploys as an AWS Lambda and HTTP API through AWS CDK.
+- Tags taggable infrastructure with consistent project, environment, component, controller, and
+  deployment-boundary ownership metadata.
 
 ## Setup
 

@@ -21,6 +21,13 @@ describe('CyberSageDataStack', () => {
         Match.objectLike({ IndexName: 'LookupByRoleId' }),
         Match.objectLike({ IndexName: 'LookupByEntityType' }),
       ]),
+      Tags: Match.arrayWith([
+        { Key: 'Component', Value: 'data' },
+        { Key: 'DeploymentBoundary', Value: 'discord-cybersage' },
+        { Key: 'Environment', Value: 'prod' },
+        { Key: 'ManagedBy', Value: 'aws-cdk' },
+        { Key: 'Project', Value: 's-cybersage' },
+      ]),
     });
   });
 });
