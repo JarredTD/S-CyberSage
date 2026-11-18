@@ -563,6 +563,125 @@ mod tests {
         );
     }
 
+    /// Confirms that commands require their data payload.
+    #[tokio::test]
+    async fn rejects_command_without_data() {
+        let router = CommandRouter::new(
+            Arc::new(FakeRoleRepository::default()),
+            Arc::new(FakeMemberRoleGateway::default()),
+        );
+
+        let error = router
+            .handle_command(&interaction_with_permissions(None))
+            .await
+            .expect_err("missing command data should fail");
+
+        assert_eq!(error.to_string(), "Missing command data");
+    }
+
+    /// Confirms that role commands require a subcommand.
+    #[tokio::test]
+    async fn rejects_role_command_without_subcommand() {
+        let router = CommandRouter::new(
+            Arc::new(FakeRoleRepository::default()),
+            Arc::new(FakeMemberRoleGateway::default()),
+        );
+        let interaction = InteractionRequest {
+            data: Some(ApplicationCommandData {
+                name: "role".to_string(),
+                options: vec![],
+                resolved: None,
+            }),
+            ..interaction_with_permissions(None)
+        };
+
+        let error = router
+            .handle_command(&interaction)
+            .await
+            .expect_err("missing subcommand should fail");
+
+        assert_eq!(error.to_string(), "Missing subcommand");
+    }
+
+    /// Confirms that unsupported role subcommands do not invoke dependencies.
+    #[tokio::test]
+    async fn rejects_unknown_role_subcommand() {
+        let router = CommandRouter::new(
+            Arc::new(FakeRoleRepository::default()),
+            Arc::new(FakeMemberRoleGateway::default()),
+        );
+        let interaction = InteractionRequest {
+            data: Some(ApplicationCommandData {
+                name: "role".to_string(),
+                options: vec![CommandOption {
+                    name: "unknown".to_string(),
+                    value: None,
+                    options: vec![],
+                }],
+                resolved: None,
+            }),
+            ..interaction_with_permissions(None)
+        };
+
+        let response = router
+            .handle_command(&interaction)
+            .await
+            .expect("unknown subcommand should produce a response");
+
+        assert_eq!(
+            response.data.and_then(|data| data.content).as_deref(),
+            Some("Unknown subcommand.")
+        );
+    }
+
+    /// Confirms that guild-scoped commands reject direct-message interactions.
+    #[tokio::test]
+    async fn rejects_command_without_guild() {
+        let router = CommandRouter::new(
+            Arc::new(FakeRoleRepository::default()),
+            Arc::new(FakeMemberRoleGateway::default()),
+        );
+        let interaction = InteractionRequest {
+            guild_id: None,
+            data: Some(ApplicationCommandData {
+                name: "unknown".to_string(),
+                options: vec![],
+                resolved: None,
+            }),
+            ..interaction_with_permissions(None)
+        };
+
+        let error = router
+            .handle_command(&interaction)
+            .await
+            .expect_err("missing guild should fail");
+
+        assert_eq!(error.to_string(), "Missing guild_id");
+    }
+
+    /// Confirms that role toggles require an invoking member.
+    #[tokio::test]
+    async fn rejects_toggle_without_member() {
+        let router = CommandRouter::new(
+            Arc::new(FakeRoleRepository {
+                roles: vec![role_registration()],
+                ..Default::default()
+            }),
+            Arc::new(FakeMemberRoleGateway::default()),
+        );
+        let interaction = InteractionRequest {
+            member: None,
+            ..toggle_interaction()
+        };
+
+        let error = router
+            .handle_command(&interaction)
+            .await
+            .expect_err("missing member should fail");
+
+        assert_eq!(error.to_string(), "Missing user_id");
+    }
+
     /// Confirms that a member who already holds a registered role has it removed.
     #[tokio::test]
     async fn removes_role_when_member_already_has_it() {
